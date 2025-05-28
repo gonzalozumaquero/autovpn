@@ -14,8 +14,9 @@
 ## 📁 Estructura del proyecto
 
 El proyecto está organizado tal y como se describe a continuación:
+
 autovpn-platform/
-autovpn-platform/
+
 
 ├── backend/        # API REST en FastAPI para gestionar peers y el estado del servidor
 
