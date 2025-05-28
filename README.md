@@ -18,25 +18,25 @@ El proyecto está organizado tal y como se describe a continuación:
 autovpn-platform/
 
 
-├── backend/        # API REST en FastAPI para gestionar peers y el estado del servidor
+  ├── backend/          # API REST en FastAPI para gestionar peers y el estado del servidor
 
-├── frontend/       # Interfaz web desarrollada con React para usuarios finales
+  ├── frontend/         # Interfaz web desarrollada con React para usuarios finales
 
-├── docker/         # Dockerfiles y configuraciones docker-compose para WireGuard y servicios relacionados
+  ├── docker/           # Dockerfiles y configuraciones docker-compose para WireGuard y servicios relacionados
 
-├── ansible/        # Scripts de automatización con Ansible para desplegar AutoVPN en la nube
+  ├── ansible/          # Scripts de automatización con Ansible para desplegar AutoVPN en la nube
 
-├── scripts/        # Scripts utilitarios (crear peer, generar QR, limpieza, etc.)
+  ├── scripts/          # Scripts utilitarios (crear peer, generar QR, limpieza, etc.)
 
-├── config/         # Archivos de entorno de ejemplo y configuración compartida
+  ├── config/           # Archivos de entorno de ejemplo y configuración compartida
 
-├── docs/           # Documentación sobre arquitectura, seguridad y casos de uso
+  ├── docs/             # Documentación sobre arquitectura, seguridad y casos de uso
 
-├── .gitignore      # Archivos y carpetas excluidos del control de versiones
+  ├── .gitignore        # Archivos y carpetas excluidos del control de versiones
 
-├── README.md       # Descripción general del proyecto e instrucciones de uso
+  ├── README.md         # Descripción general del proyecto e instrucciones de uso
 
-├── LICENSE         # Licencia del proyecto
+  ├── LICENSE           # Licencia del proyecto
 
 ## 📦 Casos de uso
 
