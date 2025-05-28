@@ -15,9 +15,9 @@
 
 El proyecto está organizado tal y como se describe a continuación:
 
-`ansible/
-  ├── backend/          # API REST en FastAPI para gestionar peers y el estado del servidor
-  ├── frontend/         # Interfaz web desarrollada con React para usuarios finales
+`ansible/`
+`  ├── backend/          # API REST en FastAPI para gestionar peers y el estado del servidor`
+`  ├── frontend/         # Interfaz web desarrollada con React para usuarios finales`
   ├── docker/           # Dockerfiles y configuraciones docker-compose para WireGuard y servicios relacionados
   ├── ansible/          # Scripts de automatización con Ansible para desplegar AutoVPN en la nube
   │   ├── deploy.yml               # Playbook principal que aplica los roles a los hosts definidos
