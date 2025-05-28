@@ -25,6 +25,20 @@ autovpn-platform/
   ├── docker/           # Dockerfiles y configuraciones docker-compose para WireGuard y servicios relacionados
 
   ├── ansible/          # Scripts de automatización con Ansible para desplegar AutoVPN en la nube
+  │   ├── deploy.yml               # Playbook principal que aplica los roles a los hosts definidos
+  │   ├── inventories
+  │   │   └── hosts.ini            # Inventario de Ansible con la IP del servidor remoto (EC2, Oracle, etc.)
+  │   └── roles
+  │       ├── docker                   # Rol para instalar Docker y Docker Compose en la máquina remota
+  │       │   └── tasks
+  │       │       └── main.yml             # Tareas del rol docker (instalación y arranque de Docker)
+  │       └── wireguard                # Rol para desplegar WireGuard mediante Docker
+  │           ├── files
+  │           │   └── docker-compose.yml   # Archivo de configuración Docker Compose para el servicio WireGuard
+  │           └── tasks
+  │               └── main.yml             # Tareas del rol WireGuard (copiar archivo y levantar contenedor)
+  ├── LICENSE
+  └── README.md
 
   ├── scripts/          # Scripts utilitarios (crear peer, generar QR, limpieza, etc.)
 
