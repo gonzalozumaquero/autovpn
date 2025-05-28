@@ -39,8 +39,8 @@ El proyecto está organizado tal y como se describe a continuación:
   ├── docs/             # Documentación sobre arquitectura, seguridad y casos de uso
   ├── .gitignore        # Archivos y carpetas excluidos del control de versiones
   ├── README.md         # Descripción general del proyecto e instrucciones de uso
-  ├── LICENSE           # Licencia del proyecto
-`
+  ├── LICENSE           # Licencia del proyecto`
+
 ## 📦 Casos de uso
 
 - Acceso remoto a una Raspberry Pi, NAS o servicios en red local.
