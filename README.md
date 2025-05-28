@@ -34,6 +34,7 @@ autovpn-platform/
 ├── .gitignore      # Archivos y carpetas excluidos del control de versiones
 
 ├── README.md       # Descripción general del proyecto e instrucciones de uso
+
 ├── LICENSE         # Licencia del proyecto
 
 ## 📦 Casos de uso
