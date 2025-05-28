@@ -1,0 +1,22 @@
+---
+- name: Crear carpeta de proyecto
+  file:
+    path: /home/ubuntu/autovpn
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+
+- name: Copiar docker-compose.yml
+  copy:
+    src: docker-compose.yml
+    dest: /home/ubuntu/autovpn/docker-compose.yml
+    owner: ubuntu
+    group: ubuntu
+    mode: '0644'
+
+- name: Desplegar contenedor WireGuard
+  shell: docker compose up -d
+  args:
+    chdir: /home/ubuntu/autovpn
+
