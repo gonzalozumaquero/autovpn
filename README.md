@@ -9,7 +9,23 @@
 - 🌐 Interfaz web intuitiva para crear y descargar configuraciones de cliente.
 - 📡 Servidor intermedio en la nube que actúa como puente seguro hacia redes domésticas.
 - 🔒 Seguridad por diseño: autenticación 2FA, cifrado extremo a extremo y firewall integrado.
-- 📁 Compatible con Windows, macOS, Linux, Android y iOS.
+- 📚 Compatible con Windows, macOS, Linux, Android y iOS.
+
+## 📁 Estructura del proyecto
+
+El proyecto está organizado tal y como se describe a continuación:
+autovpn-platform/
+autovpn-platform/
+├── backend/        # API REST en FastAPI para gestionar peers y el estado del servidor
+├── frontend/       # Interfaz web desarrollada con React para usuarios finales
+├── docker/         # Dockerfiles y configuraciones docker-compose para WireGuard y servicios relacionados
+├── ansible/        # Scripts de automatización con Ansible para desplegar AutoVPN en la nube
+├── scripts/        # Scripts utilitarios (crear peer, generar QR, limpieza, etc.)
+├── config/         # Archivos de entorno de ejemplo y configuración compartida
+├── docs/           # Documentación sobre arquitectura, seguridad y casos de uso
+├── .gitignore      # Archivos y carpetas excluidos del control de versiones
+├── README.md       # Descripción general del proyecto e instrucciones de uso
+├── LICENSE         # Licencia del proyecto
 
 ## 📦 Casos de uso
 
