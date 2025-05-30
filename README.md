@@ -18,6 +18,20 @@ El proyecto está organizado tal y como se describe a continuación:
 ```
 ansible/
   ├── backend/          # API REST en FastAPI para gestionar peers y el estado del servidor
+  |    ├── app/
+  |    │   ├── main.py              # Punto de entrada de la aplicación FastAPI
+  |    │   ├── routers/             # Rutas de la API (peers, estado, etc.)
+  |    │   │   ├── peers.py         # Crear, listar, eliminar peers
+  |    │   │   └── status.py        #  Estado del servidor VPN
+  |    │   ├── services/            # Lógica de negocio (generar claves, archivos .conf, wg set, etc.)
+  |    │   │   └── wg_manager.py    # Funciones para manejar WireGuard
+  |    │   ├── models/              # Esquemas de datos con Pydantic
+  |    │   │   └── peer.py          # Modelo PeerRequest, PeerResponse, etc.
+  |    │   ├── config.py            # Configuración global (puertos, paths, etc.)
+  |    │   └── utils.py             # Funciones auxiliares (UUID, QR, validaciones...)
+  |    │
+  |    ├── requirements.txt         # Dependencias de Python
+  |    └── Dockerfile               # Contenedor del backend
   ├── frontend/         # Interfaz web desarrollada con React para usuarios finales
   ├── docker/           # Dockerfiles y configuraciones docker-compose para WireGuard y servicios relacionados
   ├── ansible/          # Scripts de automatización con Ansible para desplegar AutoVPN en la nube
