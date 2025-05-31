@@ -1,36 +1,33 @@
-from fastapi import APIRouter
-from pydantic import BaseModel
-import uuid
+from fastapi import APIRouter, HTTPException
+from app.models.peer import PeerCreateRequest, PeerConfigResponse
+from app.services.wg_manager import from generate_real_peer_config, get_peer_config
+from app.utils import is_valid_peer_name
 
 router = APIRouter()
 
-# Modelo de entrada
-class PeerCreateRequest(BaseModel):
-    name: str
-
-# Modelo de salida
-class PeerConfigResponse(BaseModel):
-    peer_id: str
-    config: str
-
 @router.post("/", response_model=PeerConfigResponse)
 def create_peer(request: PeerCreateRequest):
-    # Simular creación de claves y archivo .conf
-    peer_id = str(uuid.uuid4())
+    # VALIDAR QUE EL NOMBRE DEL PEER SEA SEGURO Y COMPATIBLE CON EL SISTEMA DE ARCHIVOS
+    if not is_valid_peer_name(request.name):
+        raise HTTPException(status_code=400, detail="Nombre de peer no válido")
 
-    # Simulación de archivo de configuración
-    config = f"""
-[Interface]
-PrivateKey = <PRIVATE_KEY_{request.name}>
-Address = 10.13.13.10/32
-DNS = 1.1.1.1
+    # LLAMAR A LA FUNCION QUE GENERA UN .CONF FICTICIO Y LO GUARDA EN DISCO
+    # ESTO DEBERÁ CAMBIARSE MÁS ADELANTE PARA USAR CLAVES REALES CON wg genkey
+    peer_id, config = generate_fake_peer_config(request.name)
 
-[Peer]
-PublicKey = <SERVER_PUBLIC_KEY>
-Endpoint = vpn.example.com:51820
-AllowedIPs = 0.0.0.0/0
-PersistentKeepalive = 25
-"""
+    # DEVUELVE EL ID DEL PEER Y SU CONFIGURACION .CONF COMO TEXTO PLANO
+    return PeerConfigResponse(peer_id=peer_id, config=config)
 
-    return PeerConfigResponse(peer_id=peer_id, config=config.strip())
+@router.get("/{name}/config", response_model=PeerConfigResponse)
+def get_peer_configuration(name: str):
+    # VALIDAR NOMBRE ANTES DE CARGAR EL ARCHIVO
+    if not is_valid_peer_name(name):
+        raise HTTPException(status_code=400, detail="Nombre de peer no válido")
+
+    try:
+        # CARGO EL CONTENIDO DEL ARCHIVO .CONF GENERADO ANTERIORMENTE
+        config = get_peer_config(name)
+        return PeerConfigResponse(peer_id=name, config=config)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Archivo de configuración no encontrado para {name}")
 
