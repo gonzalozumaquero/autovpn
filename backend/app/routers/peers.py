@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from app.models.peer import PeerCreateRequest, PeerConfigResponse
-from app.services.wg_manager import from generate_real_peer_config, get_peer_config
+from app.services.wg_manager import generate_real_peer_config, get_peer_config
 from app.utils import is_valid_peer_name
 
 router = APIRouter()
