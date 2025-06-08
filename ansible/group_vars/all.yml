@@ -1,0 +1,5 @@
+# Variables comunes para AutoVPN
+
+server_public_key: "REEMPLAZAR_CON_LA_CLAVE_PUBLICA_DEL_SERVIDOR"
+server_url: "vpn.tudominio.com"  # O tu IP elástica si no usas DNS
+

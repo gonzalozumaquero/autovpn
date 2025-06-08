@@ -1,0 +1,27 @@
+---
+- name: Crear carpeta de proyecto
+  file:
+    path: /home/ubuntu/autovpn
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+
+- name: Copiar docker-compose.yml
+  copy:
+    src: docker-compose.yml
+    dest: /home/ubuntu/autovpn/docker-compose.yml
+    owner: ubuntu
+    group: ubuntu
+    mode: '0644'
+
+- name: Copiar archivo .env desde plantilla
+  template:
+    src: .env.j2
+    dest: /home/ubuntu/autovpn/.env
+    mode: '0644'
+
+- name: Levantar servicios AutoVPN con docker-compose
+  command: docker compose up -d
+  args:
+    chdir: /home/ubuntu/autovpn
