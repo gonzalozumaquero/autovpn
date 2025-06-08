@@ -16,7 +16,7 @@
 El proyecto está organizado tal y como se describe a continuación:
 
 ```
-ansible/
+autovpn/
   ├── backend/          # API REST en FastAPI para gestionar peers y el estado del servidor
   |    ├── app/
   |    │   ├── main.py              # Punto de entrada de la aplicación FastAPI
