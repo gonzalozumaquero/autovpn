@@ -1,0 +1,9 @@
+- name: Añadir peer WireGuard
+  hosts: vpnserver
+  become: yes
+  roles:
+    - role: wireguard
+      vars:
+        peer_name: "{{ peer_name }}"
+        peer_pubkey: "{{ peer_pubkey }}"
+        client_address: "{{ client_address }}"

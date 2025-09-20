@@ -1,0 +1,18 @@
+- name: Asegurar directorio de WireGuard
+  file:
+    path: /etc/wireguard
+    state: directory
+    mode: '0700'
+
+- name: Añadir peer al wg0.conf
+  lineinfile:
+    path: /etc/wireguard/wg0.conf
+    insertafter: EOF
+    line: |
+      [Peer]
+      # {{ peer_name }}
+      PublicKey = {{ peer_pubkey }}
+      AllowedIPs = {{ client_address }}
+
+- name: Reiniciar WireGuard
+  command: wg-quick down wg0 && wg-quick up wg0

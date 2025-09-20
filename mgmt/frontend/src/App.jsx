@@ -1,8 +1,47 @@
 // src/App.jsx
-import { useState } from "react";
+import React, { useState } from "react";
+import { genWGKeypair } from "./lib/wg-crypto";
 
-function App() {
+
+export default function App() {
   const [step, setStep] = useState(1);
+  const [serverIp, setServerIp] = useState("");
+  const [peerName, setPeerName] = useState("mi-movil");
+
+  async function generarYDescargarWG() {
+    // 1) Generar claves en cliente
+    const { privateKey, publicKey } = await genWGKeypair();
+
+    // 2) Solicitar parámetros del servidor
+    const res = await fetch("/api/wg/server_params", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ peer_name: peerName, peer_public_key: publicKey, server_hint: serverIp })
+    });
+    const params = await res.json();
+
+    // 3) Construir conf local
+    const conf = `[Interface]
+PrivateKey = ${privateKey}
+Address = ${params.client_address}
+DNS = ${params.dns}
+
+[Peer]
+PublicKey = ${params.server_public_key}
+Endpoint = ${params.endpoint}
+AllowedIPs = ${params.allowed_ips}
+`;
+
+    // 4) Descargar archivo
+    const blob = new Blob([conf], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${peerName}.conf`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+
 
   return (
     <div style={{ maxWidth: "600px", margin: "2rem auto", fontFamily: "sans-serif" }}>
@@ -10,8 +49,9 @@ function App() {
       {step === 1 && (
         <div>
           <h2>Paso 1: Servidor destino</h2>
-          <input placeholder="IP del servidor" />
-          <button onClick={() => setStep(2)}>Continuar</button>
+	      <input placeholder="IP del servidor" value={serverIp} onChange={e => setServerIp(e.target.value)} />
+              <input placeholder="Nombre del dispositivo" value={peerName} onChange={e => setPeerName(e.target.value)} />
+          <button onClick={() => setStep(2)}>Continuar</button>   
         </div>
       )}
       {step === 2 && (
@@ -28,7 +68,7 @@ function App() {
       {step === 3 && (
         <div>
           <h2>Paso 3: Generar configuración</h2>
-	  <button onClick={() => descargarConf("10.0.2.15")}>Descargar configuración</button>
+	  <button onClick={generarYDescargarWG}>Generar y descargar .conf</button>
           <button onClick={() => setStep(2)}>Atrás</button>
         </div>
       )}
@@ -37,29 +77,4 @@ function App() {
 }
 
 
-async function descargarConf(serverIp) {
-  const body = { server_ip: serverIp, ssh_user: "ubuntu", client_name: "mi-movil" };
-  const res = await fetch("/api/wg/config", {
-  method: "POST",
-  headers: {"Content-Type":"application/json"},
-  body: JSON.stringify(body),
-  });
-
-  /*const res = await fetch("http://api:8000/wg/config", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify(body),
-  });*/
-
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = "mi-movil.conf";
-  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-}
-
-
-
-
-export default App;
 

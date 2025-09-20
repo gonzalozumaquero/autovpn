@@ -1,0 +1,9 @@
+{
+  "last_assigned": "10.13.13.2",
+  "peers": {
+    "mi-dispositivo": {
+      "public_key": "XXXX",
+      "address": "10.13.13.2/32"
+    }
+  }
+}

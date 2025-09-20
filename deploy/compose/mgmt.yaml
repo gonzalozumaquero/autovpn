@@ -4,6 +4,9 @@ services:
     build: ../../mgmt/api
     ports:
       - "8000:8000"
+    volumes:
+      - ../../deploy/ansible:/app/ansible
+      - ~/.ssh:/root/.ssh:ro
   frontend:
     build: ../../mgmt/frontend
     ports:
