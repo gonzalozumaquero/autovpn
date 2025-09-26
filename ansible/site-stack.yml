@@ -1,0 +1,8 @@
+- hosts: cloud
+  become: true
+  vars_files:
+    - ../group_vars/cloud.yml
+  roles:
+    - reverse_proxy  # crea /opt/autovpn/{reverse-proxy,caddy_*} y copia Caddyfile
+    - autovpn_stack  # copia .env y docker-compose.yml + 'docker compose up -d'
+      #- { role: backup, when: s3_bucket is defined and s3_bucket|length > 0 }

@@ -1,0 +1,61 @@
+- name: Paquetes base
+  apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - git
+      - ufw
+    state: present
+    update_cache: yes
+
+- name: UFW – política por defecto
+  ufw:
+    state: enabled
+    policy: deny
+
+- name: UFW – permitir SSH
+  ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+
+- name: UFW – permitir HTTPS
+  ufw:
+    rule: allow
+    port: "443"
+    proto: tcp
+
+- name: UFW – permitir WireGuard
+  ufw:
+    rule: allow
+    port: "{{ wg_port }}"
+    proto: udp
+
+- name: Habilitar forward IPv4
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    state: present
+    reload: yes
+
+- name: Endurecer SSH (PasswordAuthentication no)
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+    create: no
+  notify: Restart ssh
+
+- name: Endurecer SSH (PermitRootLogin prohibit-password)
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^PermitRootLogin'
+    line: 'PermitRootLogin prohibit-password'
+    create: no
+  notify: Restart ssh
+
+- name: Zona horaria
+  timezone:
+    name: "{{ timezone | default('UTC') }}"
+

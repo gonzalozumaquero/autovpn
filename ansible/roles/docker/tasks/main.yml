@@ -1,0 +1,31 @@
+- name: Añadir repo Docker
+  shell: |
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list
+  args:
+    executable: /bin/bash
+
+- name: Instalar Docker CE + compose plugin
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    update_cache: yes
+    state: present
+
+- name: Añadir ubuntu a grupo docker
+  user:
+    name: ubuntu
+    groups: docker
+    append: yes
+
+- name: Habilitar y arrancar Docker
+  service:
+    name: docker
+    enabled: yes
+    state: started
+

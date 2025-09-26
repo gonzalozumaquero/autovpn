@@ -1,0 +1,79 @@
+# ───── Python / FastAPI ─────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.env
+.env
+.env.*
+
+# ───── Node.js / React ─────
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ───── Docker ─────
+*.tar
+docker-compose.override.yml
+docker/data/
+docker/wireguard/config/
+docker/wireguard/peer-keys/
+
+# ───── Ansible ─────
+*.retry
+*.vault
+ansible/roles/*/files/*.pem
+
+# ───── System / Editor files ─────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# ───── Logs / Temp ─────
+logs/
+*.log
+*.bak
+*.tmp
+
+# ───── Secrets ─────
+secrets/
+*.key
+*.crt
+*.pem
+*.ovpn
+*.conf
+
+# ───── Output / Downloads ─────
+*.zip
+*.tar.gz
+downloads/
+output/
+
+
+# APARTADO ESPECIFICO DE PROYECTO 
+
+# Inventario y secretos reales
+ansible/inventories/*.ini
+!ansible/inventories/*.ini.example
+ansible/group_vars/*.yml
+!ansible/group_vars/*.yml.example
+
+# Claves y envs
+*.pem
+.runs/
+.venv/
+.env
+wireguard/
+caddy_data/
+caddy_config/
+
+deploy/api/state/*
+!deploy/api/state/.gitkeep
+

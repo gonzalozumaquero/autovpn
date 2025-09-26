@@ -1,0 +1,22 @@
+# Este fichero debe cifrarse y ser renombrado con Ansible Vault
+
+# CON DOMINIO EN PROPIEDAD
+#domain: "autovpn.tudominio.com"
+#email_tls: "admin@tudominio.com"
+
+# Modo TLS (elige uno) | SIN DOMINIO - CON TLS INTERNO
+use_internal_tls: true          # true => Caddy 'tls internal'; false => ACME/Let's Encrypt
+email_tls: ""
+domain: ":443"
+
+# WireGuard
+wg_port: 51820
+wg_subnet: "10.13.13.0/24"
+wg_dns: "1.1.1.1"
+wg_public_host: "IP_SERVER"    # Elastic IP (o dominio) que llegará a los clientes
+
+# Backend / UI
+jwt_secret: "valor-fuerte-base64"
+s3_bucket: ""       # opcional: ej. s3://mi-bucket-autovpn
+timezone: "Europe/Madrid"
+TOTP_ISSUER: "AutoVPN"

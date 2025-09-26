@@ -1,0 +1,22 @@
+- name: Crear estructura /opt/autovpn
+  file:
+    path: /opt/autovpn/reverse-proxy
+    state: directory
+    mode: "0755"
+    recurse: yes
+
+- name: Copiar Caddyfile
+  copy:
+    src: "{{ stack_src_dir }}/reverse-proxy/{{ use_internal_tls | ternary('Caddyfile.internal','Caddyfile') }}"
+    dest: "/opt/autovpn/reverse-proxy/Caddyfile"
+    mode: "0644"
+
+- name: Crear volúmenes persistentes de Caddy
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /opt/autovpn/caddy_data
+    - /opt/autovpn/caddy_config
+

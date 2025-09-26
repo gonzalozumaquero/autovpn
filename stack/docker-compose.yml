@@ -1,0 +1,79 @@
+version: "3.9"
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy_data:/data
+      - ./caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - public
+      - internal
+
+  backend:
+    image: ghcr.io/tuorg/autovpn-backend:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - WG_HOST=${WG_HOST}
+      - WG_PORT=${WG_PORT}
+      - WG_SUBNET=${WG_SUBNET}
+      - WG_DNS=${WG_DNS}
+      - JWT_SECRET=${JWT_SECRET}
+      - TOTP_ISSUER=${TOTP_ISSUER}
+      - TZ=${TZ}
+    volumes:
+      - ./data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - internal
+
+  frontend:
+    image: ghcr.io/tuorg/autovpn-frontend:latest
+    restart: unless-stopped
+    env_file: .env
+    networks:
+      - internal
+
+  wireguard:
+    image: lscr.io/linuxserver/wireguard:latest
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv6.conf.all.disable_ipv6=1
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ}
+      - SERVERURL=${WG_HOST}
+      - SERVERPORT=${WG_PORT}
+      - PEERS=0
+      - PEERDNS=${WG_DNS}
+      - INTERNAL_SUBNET=${WG_SUBNET}
+    volumes:
+      - ./wireguard:/config
+      - /lib/modules:/lib/modules:ro
+    ports:
+      - "${WG_PORT}:${WG_PORT}/udp"
+    networks:
+      - public
+      - internal
+
+networks:
+  internal:
+    driver: bridge
+  public:
+    driver: bridge
+

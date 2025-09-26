@@ -1,0 +1,40 @@
+:443 {
+  # Compresión moderna
+  encode gzip zstd
+
+  # Certificados emitidos por la CA interna de Caddy (sin Let's Encrypt)
+  tls internal
+
+  # (Opcional pero útil) Cabeceras de seguridad básicas
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "no-referrer"
+  }
+
+  # API (backend)
+  @api path /api/* /docs /openapi.json
+  handle @api {
+    reverse_proxy backend:8000 {
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-Host  {host}
+      header_up X-Real-IP         {remote_host}
+      transport http {
+        versions h2c 1.1
+      }
+    }
+  }
+
+  # UI (frontend)
+  handle {
+    reverse_proxy frontend:3000
+  }
+
+  # Logs a stdout (por defecto en Docker). Si prefieres fichero, descomenta:
+  # log {
+  #   output file /var/log/caddy/access.log
+  #   format json
+  # }
+}
+
