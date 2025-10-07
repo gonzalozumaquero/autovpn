@@ -51,7 +51,7 @@
 # ========= Generación del .env (canónica) =========
 - name: Renderizar .env desde backend.env.j2 (controlador → remoto)
   ansible.builtin.template:
-    src: backend.env.j2           # plantilla del rol (roles/autovpn_stack/templates/backend.env.j2)
+    src: backend.env.j2 
     dest: "{{ deploy_dir }}/.env"
     mode: "0640"
   no_log: true
