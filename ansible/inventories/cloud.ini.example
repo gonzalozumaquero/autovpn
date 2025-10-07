@@ -1,3 +1,21 @@
+# =============================================================================
+# El installer genera 'inventories/cloud.ini' a partir de este ejemplo.
+# Soporta dos modos: autenticación por PEM o por contraseña (paramiko).
+# =============================================================================
+
 [cloud]
-autovpn ansible_host=ELASTIC_IP ansible_user=ubuntu ansible_ssh_private_key_file={PEM_PATH} ansible_python_interpreter=/usr/bin/python3 ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+srv ansible_host=ELASTIC_IP ansible_user=ubuntu \
+    ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+
+[cloud:vars]
+ansible_become=true
+ansible_python_interpreter=/usr/bin/python3
+ansible_port=22
+
+# --- MODO CLAVE PEM (lo rellenará el installer en /install/run) ---
+#ansible_ssh_private_key_file={PEM_PATH}
+
+# --- MODO PASSWORD (lo rellenará el installer en /install/run) ---
+#ansible_connection=paramiko
+#ansible_password={SSH_PASSWORD_PLACEHOLDER}
 

@@ -1,22 +1,54 @@
 # Este fichero debe cifrarse y ser renombrado con Ansible Vault
+# =============================================================================
 
-# CON DOMINIO EN PROPIEDAD
-#domain: "autovpn.tudominio.com"
+# -----------------------------------------------------------------------------
+# TLS / Dominio
+# -----------------------------------------------------------------------------
+# Opción A) SIN dominio → TLS interno de Caddy (CA local). El frontend/installer
+# podrá descargar la CA para instalarla en el navegador del usuario.
+use_internal_tls: true
+domain: ":443"               # Caddy escuchará en :443
+email_tls: ""                # (sin uso cuando use_internal_tls=true)
+
+# Opción B) CON dominio → Let's Encrypt/ACME (use_internal_tls=false)
+#use_internal_tls: false
+#domain: "vpn.tudominio.com"
 #email_tls: "admin@tudominio.com"
 
-# Modo TLS (elige uno) | SIN DOMINIO - CON TLS INTERNO
-use_internal_tls: true          # true => Caddy 'tls internal'; false => ACME/Let's Encrypt
-email_tls: ""
-domain: ":443"
-
+# -----------------------------------------------------------------------------
 # WireGuard
+# -----------------------------------------------------------------------------
 wg_port: 51820
 wg_subnet: "10.13.13.0/24"
 wg_dns: "1.1.1.1"
-wg_public_host: "IP_SERVER"    # Elastic IP (o dominio) que llegará a los clientes
+wg_public_host: "IP_PUBLICA_O_DOMINIO"   # IP elástica o dominio resolviendo al servidor
 
+# -----------------------------------------------------------------------------
 # Backend / UI
-jwt_secret: "valor-fuerte-base64"
-s3_bucket: ""       # opcional: ej. s3://mi-bucket-autovpn
+# -----------------------------------------------------------------------------
+# Clave fuerte (base64-url) para JWT. El installer la genera automáticamente.
+
+jwt_secret: "RELLENAR_DESDE_INSTALLER"
 timezone: "Europe/Madrid"
 TOTP_ISSUER: "AutoVPN"
+s3_bucket: ""
+
+# -----------------------------------------------------------------------------
+# Semilla de administrador inicial (el stack calculará el hash bcrypt)
+# -----------------------------------------------------------------------------
+admin_email: "admin@autovpn.local"
+admin_password: "cambia_esta_contraseña"   # en texto; Ansible generará el hash seguro
+
+# -----------------------------------------------------------------------------
+# Perfil de transporte (para entornos con filtrado/DPI)
+# -----------------------------------------------------------------------------
+# mode: "auto"  → el cliente probará: 51820/UDP → 443/UDP → udp2raw/443/TCP
+# mode: "manual" y profile en: WG_UDP_51820 | WG_UDP_443 | WG_UDP2RAW_443
+transport:
+  mode: "auto"                 
+  profile: "WG_UDP_51820"      # Solo para manual
+  udp2raw:
+    enabled: false
+    password: null             
+    mtu: null                  
+

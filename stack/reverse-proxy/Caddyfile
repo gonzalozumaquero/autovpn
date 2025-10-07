@@ -1,29 +1,72 @@
 {
   admin 127.0.0.1:2019
+  # log global opcional
+  # logging {
+  #   output stdout
+  #   level INFO
+  # }
 }
 
-https://localhost, https://127.0.0.1, https://52.47.56.217 {
+# --- Snippet con las rutas de la app (reutilizable)
+(app_routes) {
+  # API: preserva /api/* hacia backend (si tu backend expone /api)
+  @api path /api/*
+  handle @api {
+    reverse_proxy backend:8000
+  }
+
+  # Health app (útil para probes)
+  @health path /health
+  handle @health {
+    respond "ok" 200
+  }
+
+  # Frontend estático
+  handle {
+    root * /srv/frontend/dist
+    try_files {path} /index.html
+    file_server
+  }
+}
+
+# --- Sitio público (host real en env: WG_PUBLIC_HOST)
+{$WG_PUBLIC_HOST} {
+  encode zstd gzip
+
+  # TLS: por defecto interno (laboratorio/IP). Para FQDN público, usa ACME (descomenta el bloque ACME y comenta internal).
+  tls internal
+  # tls {
+  #   issuer acme {
+  #     email {$CADDY_EMAIL}
+  #   }
+  # }
+
+  # Cabeceras seguras (sólo en el host público)
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "no-referrer"
+    # Ajusta CSP si necesitas llamadas cross-origin o inline scripts
+    Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self';"
+  }
+
+  import app_routes
+}
+
+# --- Sitio local (para pruebas y loopback)
+localhost, 127.0.0.1 {
   encode zstd gzip
   tls internal
+
+  # Cabeceras mínimas (sin HSTS/preload en localhost/IP)
   header {
-    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
     X-Content-Type-Options "nosniff"
     X-Frame-Options "DENY"
     Referrer-Policy "no-referrer"
     Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self';"
   }
 
-  # API
-  handle_path /api/* {
-    reverse_proxy backend:8000
-  }
-
-  # Frontend estático
-  root * /srv/frontend/dist
-  try_files {path} /index.html
-  file_server
-
-  # Health (útil para monitorizar Caddy sin API)
-  @health path /health
-  handle @health { respond "ok" 200 }
+  import app_routes
 }
+

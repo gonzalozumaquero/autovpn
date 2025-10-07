@@ -7,6 +7,13 @@
     - group_vars/cloud.yml   # usa las variables generadas en la FASE 1
 
   pre_tasks:
+    - name: Definir defaults para transport si no viene en group_vars
+      ansible.builtin.set_fact:
+        transport: >-
+          {{
+            {'mode': 'auto', 'profile': 'WG_UDP_51820', 'udp2raw': {'enabled': false}}
+            | combine(transport | default({}), recursive=True)
+          }}
     - name: Comprobar variables requeridas para el stack
       ansible.builtin.assert:
         that:
@@ -16,6 +23,11 @@
           - wg_dns is defined and wg_dns | length > 0
           - jwt_secret is defined and jwt_secret | length > 0
           - (use_internal_tls is defined) or (domain is defined)
+          - admin_email is defined and admin_email | length > 3
+          - admin_password is defined and admin_password | length >= 8
+          - (transport.mode | default('auto')) in ['auto','manual']
+          - ((transport.mode | default('auto')) == 'auto')
+            or ((transport.profile | default('WG_UDP_51820')) in ['WG_UDP_51820','WG_UDP_443','WG_UDP2RAW_443'])          
         fail_msg: >-
           Faltan variables en group_vars/cloud.yml (wg_public_host, wg_port, wg_subnet,
           wg_dns, jwt_secret y/o use_internal_tls|domain).
@@ -105,17 +117,31 @@
         delay: 2
         timeout: 120
 
-    - name: Probe Caddy /api/health over HTTPS (localhost)
+
+    - name: Probe Caddy /health over HTTPS (SNI {{ wg_public_host }})
       ansible.builtin.uri:
-        url: https://localhost/health
+        url: "https://{{ wg_public_host }}/health"
         method: GET
         return_content: true
-        validate_certs: false     # TLS interno → ignora CA en el check
+        validate_certs: false
         status_code: 200
       register: caddy_health
       retries: 12
       delay: 5
       until: caddy_health.status == 200
+
+    - name: Probe Caddy /health via loopback with SNI
+      ansible.builtin.command:
+        cmd: >
+          curl -ksS --max-time 5
+          --resolve "{{ wg_public_host }}:443:127.0.0.1"
+          https://{{ wg_public_host }}/health
+      register: curl_health
+      retries: 12
+      delay: 5
+      until: curl_health.rc == 0
+      changed_when: false
+
 
     - name: Mostrar estado de contenedores
       ansible.builtin.command: docker compose ps

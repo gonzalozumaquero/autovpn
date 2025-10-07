@@ -87,7 +87,7 @@ export default function App() {
   // Destino
   const [serverIp, setServerIp] = useState("");
   const [sshUser, setSshUser] = useState("ubuntu");
-  const [sshPort, setSshPort] = useState(22); // NUEVO
+  const [sshPort, setSshPort] = useState(22);
 
   // Método de autenticación SSH
   const [authMethod, setAuthMethod] = useState("password"); // 'password' | 'pem'
@@ -113,6 +113,17 @@ export default function App() {
   const [timezone, setTimezone] = useState("Europe/Madrid");
   const [jwtSecret, setJwtSecret] = useState(() => b64Random(48));
   const wgPublicHost = useMemo(() => serverIp || "", [serverIp]);
+
+  // Transporte (auto / manual + udp2raw extra)
+  const [transport, setTransport] = useState({
+    mode: "auto",                 // "auto" | "manual"
+    profile: "WG_UDP_51820",      // usado solo si mode === "manual"
+    udp2raw: {
+      enabled: false,             // true si profile === "WG_UDP2RAW_443"
+      password: "",               // opcional
+      mtu: ""                     // opcional
+    }
+  });
 
   // Estado instalación / logs
   const [checkingSSH, setCheckingSSH] = useState(false);
@@ -149,7 +160,7 @@ export default function App() {
       const payload = {
         elastic_ip: serverIp.trim(),
         user: sshUser.trim() || "ubuntu",
-        ssh_port: Number(sshPort) || 22,          // NUEVO
+        ssh_port: Number(sshPort) || 22,
       };
       if (usingPem) {
         if (!pemText) throw new Error("Falta la clave .pem");
@@ -183,7 +194,6 @@ export default function App() {
     (usingPem && !!pemText) ||
     (usingPassword && !!sshPassword);
 
-  // Requisitos para habilitar acciones en Paso 1
   const canTestSSH =
     usingPem
       ? (serverIp && sshUser && pemText && sshPort)
@@ -193,51 +203,97 @@ export default function App() {
     serverIp && sshUser && hasSshCreds && adminEmailOk && pwOk && sshPort;
 
   // === Guardar config ===
+  
   async function writeConfig() {
-    if (!canProceedStep1) {
-      alert("Revisa datos: IP, usuario, puerto, credencial SSH (password o .pem) y credenciales admin.");
-      return;
-    }
-    setConfigOk(null);
-    try {
-      const ssh = {
-        elastic_ip: serverIp.trim(),
-        user: sshUser.trim() || "ubuntu",
-        ssh_port: Number(sshPort) || 22,       // NUEVO
-      };
-      if (usingPem) ssh.pem = pemText;
-      else ssh.ssh_password = sshPassword;
+	  if (!canProceedStep1) {
+		alert("Revisa datos: IP, usuario, puerto, credencial SSH (password o .pem) y credenciales admin.");
+		return;
+	  }
+	  setConfigOk(null);
 
-      const body = {
-        ssh,
-        vars: {
-          use_internal_tls: useInternalTLS,
-          wg_public_host: wgPublicHost,
-          wg_port: Number(wgPort),
-          wg_subnet: wgSubnet,
-          wg_dns: wgDNS,
-          jwt_secret: jwtSecret,
-          timezone,
-          admin_email: adminEmail.trim(),
-          admin_password: adminPassword,
-        },
-      };
+	  try {
+		// Normalización
+		const ip = (serverIp || "").trim();
+		const user = (sshUser || "ubuntu").trim();
 
-      const res = await fetch("/install/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok || !data?.ok) throw new Error(data?.detail || "Fallo al escribir configuración");
-      setConfigOk(true);
-      setAdminPassword(""); setAdminPassword2("");
-      setStep(3);
-    } catch (e) {
-      console.error(e);
-      setConfigOk(false);
-    }
+		const p = Number(sshPort);
+		const portSSH = Number.isFinite(p) && p > 0 ? p : 22;
+
+		const wgP = Number(wgPort);
+		const wgPortSafe = Number.isFinite(wgP) && wgP > 0 ? wgP : 51820;
+
+		const payload = {
+		  ssh: {
+			elastic_ip: ip,
+			user,
+			ssh_port: portSSH,
+		  },
+		  vars: {
+			use_internal_tls: !!useInternalTLS,
+			wg_public_host: (wgPublicHost || ip).trim(),
+			wg_port: wgPortSafe,
+			wg_subnet: (wgSubnet || "").trim(),
+			wg_dns: (wgDNS || "").trim(),
+			jwt_secret: (jwtSecret || "").trim(),
+			timezone: (timezone || "").trim(),
+			admin_email: (adminEmail || "").trim(),
+			admin_password: (adminPassword || "").trim(),
+		  },
+		  // No enviar campos extra si la API no los define (p. ej. transport)
+		};
+
+		// Sólo una credencial SSH
+		if (usingPem) {
+		  const key = pemText || "";
+		  if (!key) throw new Error("La clave PEM está vacía.");
+		  payload.ssh.pem = key;
+		} else {
+		  const pass = (sshPassword || "").trim();
+		  if (!pass) throw new Error("La contraseña SSH está vacía.");
+		  payload.ssh.ssh_password = pass;
+		}
+
+		// Validación mínima local
+		const required = [
+		  payload.ssh.elastic_ip,
+		  payload.vars.wg_public_host,
+		  payload.vars.wg_subnet,
+		  payload.vars.wg_dns,
+		  payload.vars.jwt_secret,
+		  payload.vars.timezone,
+		  payload.vars.admin_email,
+		  payload.vars.admin_password,
+		];
+		if (required.some(v => !v)) {
+		  throw new Error("Faltan campos requeridos en la configuración.");
+		}
+
+		const res = await fetch("/install/config", {
+		  method: "POST",
+		  headers: { "Content-Type": "application/json" },
+		  body: JSON.stringify(payload),
+		});
+
+		const text = await res.text();
+		let data = {};
+		try { data = text ? JSON.parse(text) : {}; } catch {}
+
+		if (!res.ok || data.ok === false) {
+		  const detail = data.detail ? JSON.stringify(data.detail) : text || `HTTP ${res.status}`;
+		  throw new Error(detail);
+		}
+
+		setConfigOk(true);
+		setAdminPassword(""); setAdminPassword2("");
+		setStep(3);
+	  } catch (e) {
+		console.error(e);
+		const msg = e instanceof Error ? e.message : String(e);
+		alert(`No se pudo guardar la configuración:\n${msg}`);
+		setConfigOk(false);
+	  }
   }
+
 
   // === Ejecutar instalación (SSE logs) ===
   async function runInstall() {
@@ -249,7 +305,7 @@ export default function App() {
       const ssh = {
         elastic_ip: serverIp.trim(),
         user: sshUser.trim() || "ubuntu",
-        ssh_port: Number(sshPort) || 22,       // NUEVO
+        ssh_port: Number(sshPort) || 22,
       };
       if (usingPem) ssh.pem = pemText;
       else ssh.ssh_password = sshPassword;
@@ -270,6 +326,7 @@ export default function App() {
             admin_email: adminEmail.trim(),
             admin_password: adminPassword || undefined,
           },
+          //transport,
         }),
       });
       const data = await res.json();
@@ -327,9 +384,12 @@ export default function App() {
             <div style={rowStyle}>
               <label>Puerto SSH</label>
               <input
+                type="number"
+                min={1}
+                max={65535}
                 placeholder="22"
                 value={sshPort}
-                onChange={(e) => setSshPort(e.target.value)}
+                onChange={(e) => setSshPort(e.target.value ? Number(e.target.value) : "")}
                 style={baseInput}
                 inputMode="numeric"
               />
@@ -480,8 +540,93 @@ export default function App() {
           <section style={sectionStyle}>
             <h2 style={sectionTitleStyle}>Parámetros de despliegue</h2>
 
+            {/* Perfil de transporte */}
+            <div style={{border:'1px solid #444', borderRadius:8, padding:16, marginTop:16}}>
+              <h3 style={{marginTop:0, color: COLORS.orange}}>Perfil de transporte</h3>
+
+              <label style={{display:'block', marginBottom:8}}>
+                <input
+                  type="radio"
+                  name="transportMode"
+                  checked={transport.mode === "auto"}
+                  onChange={() => setTransport({ ...transport, mode:"auto" })}
+                />{" "}
+                Auto-detección (recomendado)
+              </label>
+
+              <label style={{display:'block', marginBottom:8}}>
+                <input
+                  type="radio"
+                  name="transportMode"
+                  checked={transport.mode === "manual"}
+                  onChange={() => setTransport({ ...transport, mode:"manual" })}
+                />{" "}
+                Manual
+              </label>
+
+              {transport.mode === "manual" && (
+                <div style={{display:'grid', gap:8, gridTemplateColumns:'1fr 1fr'}}>
+                  <label>Perfil
+                    <select
+                      style={{width:'100%'}}
+                      value={transport.profile}
+                      onChange={(e) => {
+                        const profile = e.target.value;
+                        setTransport(t => ({
+                          ...t,
+                          profile,
+                          udp2raw: {
+                            ...t.udp2raw,
+                            enabled: profile === "WG_UDP2RAW_443"
+                          }
+                        }))
+                      }}
+                    >
+                      <option value="WG_UDP_51820">WG/UDP 51820 (por defecto)</option>
+                      <option value="WG_UDP_443">WG/UDP 443 (simula QUIC)</option>
+                      <option value="WG_UDP2RAW_443">WG encapsulado (udp2raw/443)</option>
+                    </select>
+                  </label>
+
+                  {/* Campos extra si udp2raw */}
+                  {transport.profile === "WG_UDP2RAW_443" && (
+                    <>
+                      <label>Password udp2raw (opcional)
+                        <input
+                          type="text"
+                          value={transport.udp2raw.password}
+                          onChange={(e) => setTransport(t => ({
+                            ...t,
+                            udp2raw: {...t.udp2raw, enabled:true, password: e.target.value}
+                          }))}
+                          style={{width:'100%'}}
+                        />
+                      </label>
+                      <label>MTU (opcional)
+                        <input
+                          type="number"
+                          min={1100}
+                          max={1500}
+                          value={transport.udp2raw.mtu}
+                          onChange={(e) => setTransport(t => ({
+                            ...t,
+                            udp2raw: {...t.udp2raw, enabled:true, mtu: e.target.value}
+                          }))}
+                          style={{width:'100%'}}
+                        />
+                      </label>
+                    </>
+                  )}
+                </div>
+              )}
+
+              <small style={{display:'block', marginTop:8, color:'#aaa'}}>
+                En “Auto” el cliente probará: 51820/UDP → 443/UDP → udp2raw/443/TCP.
+              </small>
+            </div>
+
             {/* Usar TLS interno (alineado a la izquierda) */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "12px 0" }}>
               <input
                 id="useInternalTLS"
                 type="checkbox"
@@ -535,7 +680,7 @@ export default function App() {
           <div style={{ marginTop: 16, display: "flex", gap: 12 }}>
             <button
               onClick={writeConfig}
-              disabled={!canProceedStep1 || sshOk !== true}
+	      disabled={!canProceedStep1 || sshOk !== true || (usingPem && !pemText)}
               title={sshOk !== true ? "Primero verifica SSH" : ""}
             >
               Guardar configuración y continuar

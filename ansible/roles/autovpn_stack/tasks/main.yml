@@ -4,7 +4,7 @@
   ansible.builtin.file:
     path: "{{ deploy_dir }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
 
 # ========= Validaciones de origen (en el CONTROLADOR) =========
 - name: Comprobar existencia de stack/docker-compose.yml en el controlador
@@ -15,21 +15,12 @@
   run_once: true
   changed_when: false
 
-- name: Comprobar existencia de backend.env.example en el controlador
-  ansible.builtin.stat:
-    path: "{{ (stack_src_dir | default('/app/stack')) }}/backend.env.example"
-  register: _env_stat
-  delegate_to: localhost
-  run_once: true
-  changed_when: false
-
-- name: Fallar si faltan artefactos requeridos en el controlador
+- name: Fallar si falta docker-compose.yml en el controlador
   ansible.builtin.fail:
     msg: >-
-      Faltan artefactos en el controlador:
-      {% if not _dc_stat.stat.exists %}- {{ (stack_src_dir | default('/app/stack')) }}/docker-compose.yml{% endif %}
-      {% if not _env_stat.stat.exists %}- {{ (stack_src_dir | default('/app/stack')) }}/backend.env.example{% endif %}
-  when: not (_dc_stat.stat.exists and _env_stat.stat.exists)
+      Falta el artefacto en el controlador:
+      {{ (stack_src_dir | default('/app/stack')) }}/docker-compose.yml
+  when: not _dc_stat.stat.exists
   delegate_to: localhost
   run_once: true
 
@@ -38,7 +29,7 @@
   ansible.builtin.copy:
     src: "{{ (stack_src_dir | default('/app/stack')) }}/docker-compose.yml"
     dest: "{{ deploy_dir }}/docker-compose.yml"
-    mode: '0644'
+    mode: "0644"
 
 # (Opcional) build local del backend
 - name: Verificar si existe backend para build local en el controlador
@@ -57,28 +48,15 @@
     directory_mode: "0755"
   when: _backend_build.stat.exists
 
-# ========= Generación del .env =========
-- name: Construir .env del backend desde backend.env.example (controlador → remoto)
+# ========= Generación del .env (canónica) =========
+- name: Renderizar .env desde backend.env.j2 (controlador → remoto)
   ansible.builtin.template:
-    src: "{{ (stack_src_dir | default('/app/stack')) }}/backend.env.example"
+    src: backend.env.j2           # plantilla del rol (roles/autovpn_stack/templates/backend.env.j2)
     dest: "{{ deploy_dir }}/.env"
     mode: "0640"
-  vars:
-    timezone: "{{ timezone }}"
-    wg_public_host: "{{ wg_public_host }}"
-    wg_port: "{{ wg_port }}"
-    wg_subnet: "{{ wg_subnet }}"
-    wg_dns: "{{ wg_dns }}"
-    admin_email: "{{ admin_email }}"
-    admin_password_hash: "{{ admin_password_hash }}"
-    jwt_secret: "{{ jwt_secret }}"
-    wg_mode: "{{ wg_mode | default('container') }}"
-    wg_container_name: "{{ wg_container_name | default('wireguard') }}"
-    totp_issuer: "{{ totp_issuer | default('AutoVPN') }}"
   no_log: true
 
 # ========= Artefactos cifrados (Vault) opcionales =========
-
 - name: Asegurar carpeta de artifacts en el controlador
   ansible.builtin.file:
     path: "artifacts"
@@ -91,8 +69,8 @@
   ansible.builtin.slurp:
     src: "{{ deploy_dir }}/.env"
   register: env_slurped
+  no_log: true
 
-# Solo ciframos si se define vault_password
 - name: Aviso - no se cifrará .env (no hay vault_password)
   ansible.builtin.debug:
     msg: "Saltando cifrado Vault: variable 'vault_password' no definida."
@@ -146,11 +124,23 @@
   delegate_to: localhost
   no_log: true
 
+# ========= Validación de Compose (previa al up) =========
+- name: Validar docker compose config con .env
+  ansible.builtin.command:
+    cmd: docker compose --env-file .env config
+    chdir: "{{ deploy_dir }}"
+  environment:
+    COMPOSE_PROFILES: "{{ (transport.mode == 'manual' and transport.profile == 'WG_UDP2RAW_443') | ternary('udp2raw','') }}"
+  register: compose_cfg
+  changed_when: false
+
 # ========= Levantar el stack =========
 - name: docker compose up -d
-  ansible.builtin.command: docker compose up -d
-  args:
+  ansible.builtin.command:
+    cmd: docker compose up -d
     chdir: "{{ deploy_dir }}"
+  environment:
+    COMPOSE_PROFILES: "{{ (transport.mode == 'manual' and transport.profile == 'WG_UDP2RAW_443') | ternary('udp2raw','') }}"
   register: compose_up
   changed_when: "'Creating' in compose_up.stdout or 'Recreating' in compose_up.stdout"
 

@@ -8,6 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-client sshpass curl git \
     ansible \
+    openssh-client sshpass curl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
