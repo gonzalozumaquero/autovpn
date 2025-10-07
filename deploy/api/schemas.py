@@ -1,11 +1,13 @@
+# schemas.py
 from pydantic import BaseModel, Field
 
+# --- ya existentes ---
 class WGParamsReq(BaseModel):
-    peer_name: str = Field(..., min_length=1, max_length=64)
-    peer_public_key: str = Field(..., min_length=40, max_length=120)
-    server_hint: str = Field(..., description="IP o FQDN del servidor destino")
-    ssh_user: str | None = None 
-    ssh_password: str | None = Field(None, description="(Opcional) Password inicial para bootstrap")
+    peer_name: str
+    peer_public_key: str
+    server_hint: str
+    ssh_user: str | None = None
+    ssh_password: str | None = None
 
 class WGParamsResp(BaseModel):
     endpoint: str
@@ -13,3 +15,25 @@ class WGParamsResp(BaseModel):
     dns: str
     allowed_ips: str
     client_address: str
+
+# --- nuevos para installer ---
+class SSHConfig(BaseModel):
+    elastic_ip: str
+    pem: str = Field(..., description="Contenido PEM en texto")
+    user: str = "ubuntu"
+
+class StackVars(BaseModel):
+    use_internal_tls: bool = True
+    wg_public_host: str
+    wg_port: int = 51820
+    wg_subnet: str = "10.13.13.0/24"
+    wg_dns: str = "1.1.1.1"
+    jwt_secret: str
+    timezone: str = "Europe/Madrid"
+    s3_bucket: str = ""
+
+class InstallConfig(BaseModel):
+    ssh: SSHConfig
+    vars: StackVars
+    vault_password: str | None = None
+

@@ -1,15 +1,94 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AutoVPN</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0b1020" />
+    <title>AutoVPN · Instalación asistida</title>
+
+    <!-- Estilos base ligeros -->
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      html, body, #root {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+          "Apple Color Emoji", "Segoe UI Emoji";
+        background: #0b1020;
+        color: #e6edf3;
+      }
+      a, button, input, select, textarea {
+        font: inherit;
+      }
+      input, select, textarea {
+        background: #0f1730;
+        color: #e6edf3;
+        border: 1px solid #2a3558;
+        border-radius: 8px;
+        padding: 8px 10px;
+      }
+      button {
+        background: #2b6cff;
+        color: #fff;
+        border: 0;
+        border-radius: 8px;
+        padding: 10px 14px;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      h1, h2, h3 {
+        margin: 0 0 .5rem 0;
+      }
+      code, pre, kbd {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+          monospace;
+      }
+      .container {
+        max-width: 980px;
+        margin: 40px auto;
+        padding: 0 16px;
+      }
+      .card {
+        background: #0f1730;
+        border: 1px solid #2a3558;
+        border-radius: 12px;
+        padding: 16px;
+      }
+      .footer {
+        opacity: .7;
+        font-size: 12px;
+        text-align: center;
+        margin: 24px 0 40px;
+      }
+    </style>
   </head>
   <body>
+    <noscript>
+      <div class="container">
+        <div class="card">
+          Necesitas habilitar JavaScript para usar el instalador asistido de AutoVPN.
+        </div>
+      </div>
+    </noscript>
+
     <div id="root"></div>
-    <!-- Aquí es donde React inyecta la app -->
+
+    <!-- Punto de entrada Vite/React -->
     <script type="module" src="/src/main.jsx"></script>
+
+    <!-- (Opcional) Variables de entorno visibles del cliente
+         Si más adelante necesitas leer algo como import.meta.env.VITE_API_URL,
+         define VITE_* en el entorno de Vite o en un .env.local -->
   </body>
 </html>
 

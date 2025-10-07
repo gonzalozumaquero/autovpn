@@ -1,0 +1,11 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+passlib[bcrypt]==1.7.4
+pyjwt==2.9.0
+pyotp==2.9.0
+qrcode==7.4.2
+pydantic-settings==2.5.2
+sqlmodel==0.0.22
+docker==7.1.0
+bcrypt==4.0.1  

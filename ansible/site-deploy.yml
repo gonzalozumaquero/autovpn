@@ -1,5 +1,49 @@
-- hosts: cloud
+- name: AutoVPN · Deploy (bootstrap del nodo)
+  hosts: cloud
   become: true
+  gather_facts: yes
+
+  vars_files:
+    - group_vars/cloud.yml   # usa cloud.yml (puede estar cifrado con Vault)
+
+  pre_tasks:
+    - name: Comprobar distribución soportada (Ubuntu 22.04+)
+    # Si tu AMI es distinta, ajusta esta comprobación.
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Ubuntu"
+          - ansible_distribution_version is version("22.04", ">=")
+        fail_msg: "Este playbook requiere Ubuntu 22.04 o superior."
+        success_msg: "Ubuntu {{ ansible_distribution_version }} OK."
+
+    - name: Comprobar variables mínimas definidas
+      ansible.builtin.assert:
+        that:
+          - wg_port is defined
+          - wg_subnet is defined
+          - wg_dns is defined
+          - timezone is defined
+        fail_msg: "Faltan variables requeridas en group_vars/cloud.yml (wg_port, wg_subnet, wg_dns, timezone)."
+        success_msg: "Variables requeridas detectadas."
+
+    # (Opcional) Exponer lista de puertos para el rol 'common'
+    - name: Definir puertos a permitir en UFW
+      ansible.builtin.set_fact:
+        ufw_allow_list:
+          - { proto: "tcp", port: "22"   }
+          - { proto: "tcp", port: "443"  }
+          - { proto: "udp", port: "{{ wg_port | string }}" }
+
   roles:
-    - common
-    - docker
+    - role: common     # UFW, ip_forward, timezone, endurecimiento SSH
+    - role: docker     # Docker CE + plugin docker compose
+
+  post_tasks:
+    - name: Resumen post-deploy
+      ansible.builtin.debug:
+        msg:
+          - "Deploy completado en {{ inventory_hostname }}."
+          - "UFW permitido: 22/tcp, 443/tcp, {{ wg_port }}/udp"
+          - "Timezone aplicado: {{ timezone }}"
+          - "ip_forward: {{ ansible_sysctl['net.ipv4.ip_forward'] | default('desconocido') }}"
+

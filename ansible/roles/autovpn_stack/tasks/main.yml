@@ -1,0 +1,160 @@
+# roles/autovpn_stack/tasks/main.yml
+
+- name: Asegurar directorio de despliegue
+  ansible.builtin.file:
+    path: "{{ deploy_dir }}"
+    state: directory
+    mode: '0755'
+
+# ========= Validaciones de origen (en el CONTROLADOR) =========
+- name: Comprobar existencia de stack/docker-compose.yml en el controlador
+  ansible.builtin.stat:
+    path: "{{ (stack_src_dir | default('/app/stack')) }}/docker-compose.yml"
+  register: _dc_stat
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+
+- name: Comprobar existencia de backend.env.example en el controlador
+  ansible.builtin.stat:
+    path: "{{ (stack_src_dir | default('/app/stack')) }}/backend.env.example"
+  register: _env_stat
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+
+- name: Fallar si faltan artefactos requeridos en el controlador
+  ansible.builtin.fail:
+    msg: >-
+      Faltan artefactos en el controlador:
+      {% if not _dc_stat.stat.exists %}- {{ (stack_src_dir | default('/app/stack')) }}/docker-compose.yml{% endif %}
+      {% if not _env_stat.stat.exists %}- {{ (stack_src_dir | default('/app/stack')) }}/backend.env.example{% endif %}
+  when: not (_dc_stat.stat.exists and _env_stat.stat.exists)
+  delegate_to: localhost
+  run_once: true
+
+# ========= Copia de artefactos =========
+- name: Copiar docker-compose.yml al servidor
+  ansible.builtin.copy:
+    src: "{{ (stack_src_dir | default('/app/stack')) }}/docker-compose.yml"
+    dest: "{{ deploy_dir }}/docker-compose.yml"
+    mode: '0644'
+
+# (Opcional) build local del backend
+- name: Verificar si existe backend para build local en el controlador
+  ansible.builtin.stat:
+    path: "{{ (stack_src_dir | default('/app/stack')) }}/backend/Dockerfile"
+  register: _backend_build
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+
+- name: Copiar backend/ al servidor (build local)
+  ansible.builtin.copy:
+    src: "{{ (stack_src_dir | default('/app/stack')) }}/backend/"
+    dest: "{{ deploy_dir }}/backend/"
+    mode: "0644"
+    directory_mode: "0755"
+  when: _backend_build.stat.exists
+
+# ========= Generación del .env =========
+- name: Construir .env del backend desde backend.env.example (controlador → remoto)
+  ansible.builtin.template:
+    src: "{{ (stack_src_dir | default('/app/stack')) }}/backend.env.example"
+    dest: "{{ deploy_dir }}/.env"
+    mode: "0640"
+  vars:
+    timezone: "{{ timezone }}"
+    wg_public_host: "{{ wg_public_host }}"
+    wg_port: "{{ wg_port }}"
+    wg_subnet: "{{ wg_subnet }}"
+    wg_dns: "{{ wg_dns }}"
+    admin_email: "{{ admin_email }}"
+    admin_password_hash: "{{ admin_password_hash }}"
+    jwt_secret: "{{ jwt_secret }}"
+    wg_mode: "{{ wg_mode | default('container') }}"
+    wg_container_name: "{{ wg_container_name | default('wireguard') }}"
+    totp_issuer: "{{ totp_issuer | default('AutoVPN') }}"
+  no_log: true
+
+# ========= Artefactos cifrados (Vault) opcionales =========
+
+- name: Asegurar carpeta de artifacts en el controlador
+  ansible.builtin.file:
+    path: "artifacts"
+    state: directory
+    mode: "0750"
+  delegate_to: localhost
+  run_once: true
+
+- name: Leer contenido del .env recién generado (desde el target)
+  ansible.builtin.slurp:
+    src: "{{ deploy_dir }}/.env"
+  register: env_slurped
+
+# Solo ciframos si se define vault_password
+- name: Aviso - no se cifrará .env (no hay vault_password)
+  ansible.builtin.debug:
+    msg: "Saltando cifrado Vault: variable 'vault_password' no definida."
+  when: vault_password is not defined or (vault_password | length) == 0
+  run_once: true
+  delegate_to: localhost
+
+- name: Preparar password file temporal para Vault (controlador)
+  ansible.builtin.copy:
+    dest: "/tmp/.vault_pw_{{ inventory_hostname }}"
+    content: "{{ vault_password }}"
+    mode: "0600"
+  when: vault_password is defined and (vault_password | length) > 0
+  run_once: true
+  delegate_to: localhost
+  no_log: true
+
+- name: Escribir .env plano como archivo temporal en controlador
+  ansible.builtin.copy:
+    dest: "/tmp/.env_plain_{{ inventory_hostname }}"
+    content: "{{ env_slurped.content | b64decode }}"
+    mode: "0600"
+  when: vault_password is defined and (vault_password | length) > 0
+  run_once: true
+  delegate_to: localhost
+  no_log: true
+
+- name: Cifrar .env con ansible-vault (a fichero)
+  ansible.builtin.command:
+    cmd: >-
+      ansible-vault encrypt
+      --vault-password-file /tmp/.vault_pw_{{ inventory_hostname }}
+      --output artifacts/{{ inventory_hostname }}.autovpn.env.vault
+      /tmp/.env_plain_{{ inventory_hostname }}
+  when: vault_password is defined and (vault_password | length) > 0
+  register: vault_encrypt
+  changed_when: "'Encryption successful' in vault_encrypt.stdout"
+  run_once: true
+  delegate_to: localhost
+  no_log: true
+
+- name: Limpiar temporales de vault (controlador)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/tmp/.vault_pw_{{ inventory_hostname }}"
+    - "/tmp/.env_plain_{{ inventory_hostname }}"
+  when: vault_password is defined and (vault_password | length) > 0
+  run_once: true
+  delegate_to: localhost
+  no_log: true
+
+# ========= Levantar el stack =========
+- name: docker compose up -d
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: "{{ deploy_dir }}"
+  register: compose_up
+  changed_when: "'Creating' in compose_up.stdout or 'Recreating' in compose_up.stdout"
+
+- name: Mostrar salida de docker compose
+  ansible.builtin.debug:
+    var: compose_up.stdout
+

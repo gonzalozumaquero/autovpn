@@ -1,13 +1,29 @@
-{$DOMAIN} {
-  encode gzip zstd
-  tls {$EMAIL_TLS}
+{
+  admin 127.0.0.1:2019
+}
 
-  @api path /api/* /docs /openapi.json
-  handle @api {
+https://localhost, https://127.0.0.1, https://52.47.56.217 {
+  encode zstd gzip
+  tls internal
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "no-referrer"
+    Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self';"
+  }
+
+  # API
+  handle_path /api/* {
     reverse_proxy backend:8000
   }
 
-  handle {
-    reverse_proxy frontend:3000
-  }
+  # Frontend estático
+  root * /srv/frontend/dist
+  try_files {path} /index.html
+  file_server
+
+  # Health (útil para monitorizar Caddy sin API)
+  @health path /health
+  handle @health { respond "ok" 200 }
 }

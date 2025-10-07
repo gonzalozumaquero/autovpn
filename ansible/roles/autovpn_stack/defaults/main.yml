@@ -1,0 +1,4 @@
+# ansible/roles/autovpn_stack/defaults/main.yml
+deploy_dir: "/opt/autovpn"
+stack_src_dir: "/app/stack"
+

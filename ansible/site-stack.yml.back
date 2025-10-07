@@ -1,3 +1,4 @@
+---
 - name: AutoVPN · Stack (reverse proxy + backend + frontend + WireGuard)
   hosts: cloud
   become: true
@@ -67,29 +68,16 @@
       delegate_to: localhost
       changed_when: false
 
-    # === BLOQUE HASH ROBUSTO (bcrypt directo, sin passlib) ===
-    - name: Derivar hash bcrypt (<=72 bytes reales) con bcrypt puro
-      delegate_to: localhost
-      ansible.builtin.command:
-        cmd: >-
-          {{ ansible_playbook_python }}
-          -c
-          "import os,sys,bcrypt;
-          b=os.environ.get('PW','').encode('utf-8')[:72];
-          sys.stdout.write(bcrypt.hashpw(b,bcrypt.gensalt(rounds=12)).decode())"
-      environment:
-        PW: "{{ admin_password | default('') }}"
-        LC_ALL: C.UTF-8
-        LANG: C.UTF-8
-      register: _bcrypt
-      changed_when: true
-      failed_when: _bcrypt.rc != 0
-    
-    - name: Guardar hash derivado
+    - name: Truncar admin_password a 72 bytes para bcrypt
       ansible.builtin.set_fact:
-        admin_password_hash: "{{ _bcrypt.stdout | trim }}"
+        admin_password_effective: "{{ (admin_password | string)[:72] }}"
       no_log: true
-    # === FIN BLOQUE HASH ROBUSTO ===
+
+    - name: Derivar hash bcrypt en controlador
+      ansible.builtin.set_fact:
+        admin_password_hash: "{{ admin_password_effective | password_hash('bcrypt', rounds=12) }}"
+      no_log: true
+      delegate_to: localhost
 
   roles:
     - role: reverse_proxy      # Caddy + Caddyfile(.internal) + volúmenes

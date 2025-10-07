@@ -1,0 +1,4 @@
+# ansible/roles/reverse_proxy/defaults/main.yml
+deploy_dir: "/opt/autovpn"
+# por defecto, asume que el installer monta el repo en /app y ahí vive stack/
+stack_src_dir: "/app/stack"

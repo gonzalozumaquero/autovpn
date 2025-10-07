@@ -27,8 +27,13 @@
   }
 
   # UI (frontend)
+  #handle {
+  #  reverse_proxy frontend:3000
+  #}
+  
+  # Sin frontend de momento
   handle {
-    reverse_proxy frontend:3000
+    respond "AutoVPN server up. API at /api/health" 200
   }
 
   # Logs a stdout (por defecto en Docker). Si prefieres fichero, descomenta:

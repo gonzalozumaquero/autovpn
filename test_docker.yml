@@ -1,0 +1,75 @@
+services:
+  api:
+    build:
+      context: ./deploy/api
+      dockerfile: Dockerfile
+    image: autovpn-installer:dev
+    container_name: autovpn-installer-api
+    environment:
+      APP_MODE: installer             # "installer" (local asistido). En servidor usarías "server"
+      FRONTEND_ORIGIN: http://localhost:3000
+      WG_MODE: container              # o "host" si WireGuard corre nativo en la EC2
+      WG_CONTAINER_NAME: wireguard
+    ports:
+      - "4000:4000"
+    volumes:
+      # Montamos repo para que la API pueda ejecutar Ansible y copiar el stack
+      - ./ansible:/app/ansible
+      - ./stack:/app/stack
+      - ./deploy/api/state:/app/state
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    restart: unless-stopped
+    networks:
+      - autovpn_net
+    # (Opcional) Si alguna vez quieres acceder al host desde dentro del contenedor:
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+
+  ui:
+    build:
+      context: ./deploy/frontend
+      dockerfile: Dockerfile
+    image: autovpn-installer-ui:dev
+    container_name: autovpn-installer-ui
+    ports:
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    extra_hosts:
+      # Si tu nginx.conf usa host.docker.internal (opción B), Linux necesita este atajo:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    networks:
+      - autovpn_net
+
+  # === Nuevo: servidor SSH de pruebas (password) ===
+  ssh-test:
+    image: ghcr.io/linuxserver/openssh-server:latest
+    container_name: autovpn-ssh-test
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - SUDO_ACCESS=true
+      - PASSWORD_ACCESS=true
+      - USER_NAME=ubuntu
+      - USER_PASSWORD=TuPass!2025
+      # Puerto interno que expone esta imagen
+      - PUBLIC_KEY_FILE= # vacío para forzar password-only en la prueba
+    ports:
+      - "2222:2222"   # acceso desde tu host (solo para pruebas locales)
+    restart: unless-stopped
+    networks:
+      - autovpn_net
+    # (Opcional) volumen para persistir /config si quieres conservar ajustes
+    # volumes:
+    #   - ./ssh-test-config:/config
+
+networks:
+  autovpn_net:
+    driver: bridge
+

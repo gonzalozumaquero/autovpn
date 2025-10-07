@@ -1,54 +1,67 @@
 version: "3.9"
 
 services:
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./caddy_data:/data
-      - ./caddy_config:/config
-    depends_on:
-      - backend
-      - frontend
-    networks:
-      - public
-      - internal
-
   backend:
-    image: ghcr.io/tuorg/autovpn-backend:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: autovpn-backend
     restart: unless-stopped
     env_file: .env
     environment:
+      # Overrides seguros (si faltan en .env):
+      - APP_MODE=server
+      - WG_MODE=${WG_MODE:-container}           # container|host
+      - WG_CONTAINER_NAME=${WG_CONTAINER_NAME:-wireguard}
       - WG_HOST=${WG_HOST}
       - WG_PORT=${WG_PORT}
       - WG_SUBNET=${WG_SUBNET}
       - WG_DNS=${WG_DNS}
       - JWT_SECRET=${JWT_SECRET}
-      - TOTP_ISSUER=${TOTP_ISSUER}
+      - TOTP_ISSUER=${TOTP_ISSUER:-AutoVPN}
       - TZ=${TZ}
     volumes:
       - ./data:/app/data
+      # Solo si el backend necesita hablar con el daemon Docker local (p.ej. inspecciones):
       - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - internal
+    expose:
+      - "8000"                                 # Caddy reverse_proxy -> backend:8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=2).getcode()==200 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks: [internal]
 
-  frontend:
-    image: ghcr.io/tuorg/autovpn-frontend:latest
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
     restart: unless-stopped
-    env_file: .env
-    networks:
-      - internal
+    ports:
+      - "443:443"                        # HTTPS público
+    volumes:
+      - ./reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy_data:/data
+      - ./caddy_config:/config
+      - ./frontend/dist:/srv/frontend/dist:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:2019/config >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 15
+      start_period: 10s
+    networks: [internal, public]
+
 
   wireguard:
     image: lscr.io/linuxserver/wireguard:latest
+    container_name: wireguard
     restart: unless-stopped
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
+    cap_add: [NET_ADMIN, SYS_MODULE]
     sysctls:
       - net.ipv4.ip_forward=1
       - net.ipv4.conf.all.src_valid_mark=1
@@ -59,7 +72,7 @@ services:
       - TZ=${TZ}
       - SERVERURL=${WG_HOST}
       - SERVERPORT=${WG_PORT}
-      - PEERS=0
+      - PEERS=0                # gestionas peers desde el backend (wg set)
       - PEERDNS=${WG_DNS}
       - INTERNAL_SUBNET=${WG_SUBNET}
     volumes:
@@ -67,9 +80,7 @@ services:
       - /lib/modules:/lib/modules:ro
     ports:
       - "${WG_PORT}:${WG_PORT}/udp"
-    networks:
-      - public
-      - internal
+    networks: [public, internal]
 
 networks:
   internal:
