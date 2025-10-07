@@ -1,0 +1,87 @@
+{
+  admin 127.0.0.1:2019
+  # logging opcional
+  # logging {
+  #   output stdout
+  #   level INFO
+  # }
+}
+
+# --- Snippet con las rutas de la app (reutilizable)
+(app_routes) {
+  # API: preserva /api/* hacia backend
+  @api path /api/*
+  handle @api {
+    reverse_proxy backend:8000
+  }
+
+  # Health app (útil para probes)
+  @health path /health
+  handle @health {
+    respond "ok" 200
+  }
+
+  # Frontend estático (SPA)
+  handle {
+    root * /srv/frontend/dist
+    try_files {path} /index.html
+    file_server
+  }
+}
+
+# --- Sitio "público" (normalmente IP/FQDN del servidor)
+# Usa TLS interno por defecto; si usas FQDN público con ACME, sustituir por bloque tls { issuer acme ... }
+{$WG_PUBLIC_HOST} {
+  encode zstd gzip
+
+  tls internal
+  # tls {
+  #   issuer acme {
+  #     email {$CADDY_EMAIL}
+  #   }
+  # }
+
+  # Cabeceras seguras (en el host público/IP)
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "no-referrer"
+    Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self';"
+  }
+
+  import app_routes
+}
+
+# --- Sitio de loopback interno (SNI válido para TLS interno y sondas locales)
+# Define la variable de entorno INTERNAL_LOOPBACK_HOST, p.ej.: "autovpn.local"
+{$INTERNAL_LOOPBACK_HOST} {
+  encode zstd gzip
+  tls internal
+
+  # Cabeceras mínimas (sin HSTS para evitar fijar políticas en un host local)
+  header {
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "no-referrer"
+    Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self';"
+  }
+
+  import app_routes
+}
+
+# --- Sitios locales de desarrollo (opcional)
+localhost, 127.0.0.1 {
+  encode zstd gzip
+  tls internal
+
+  header {
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "no-referrer"
+    Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self';"
+  }
+
+  import app_routes
+}
+

@@ -9,6 +9,7 @@
 use_internal_tls: true
 domain: ":443"               # Caddy escuchará en :443
 email_tls: ""                # (sin uso cuando use_internal_tls=true)
+internal_loopback_host: "autovpn.local"
 
 # Opción B) CON dominio → Let's Encrypt/ACME (use_internal_tls=false)
 #use_internal_tls: false

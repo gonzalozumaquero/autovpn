@@ -111,37 +111,87 @@
   post_tasks:
     - name: Wait for Caddy to bind :443 (TCP)
       ansible.builtin.wait_for:
-        host: 127.0.0.1          # no uses ansible_host/IP pública aquí
+        host: 127.0.0.1
         port: 443
         state: started
         delay: 2
         timeout: 120
 
+    - name: Detectar si wg_public_host es IPv4
+      ansible.builtin.set_fact:
+        _host_is_ipv4: "{{ (wg_public_host is match('^\\d+\\.\\d+\\.\\d+\\.\\d+$')) | bool }}"
 
-    - name: Probe Caddy /health over HTTPS (SNI {{ wg_public_host }})
+    # ====== EXTERNO (ACME) ======
+    - name: Probe Caddy /health over HTTPS (externo, FQDN con ACME)
       ansible.builtin.uri:
         url: "https://{{ wg_public_host }}/health"
         method: GET
-        return_content: true
-        validate_certs: false
         status_code: 200
-      register: caddy_health
+        validate_certs: true
+        return_content: false
+        timeout: 5
+      register: ext_health
       retries: 12
-      delay: 5
-      until: caddy_health.status == 200
-
-    - name: Probe Caddy /health via loopback with SNI
-      ansible.builtin.command:
-        cmd: >
-          curl -ksS --max-time 5
-          --resolve "{{ wg_public_host }}:443:127.0.0.1"
-          https://{{ wg_public_host }}/health
-      register: curl_health
-      retries: 12
-      delay: 5
-      until: curl_health.rc == 0
+      delay: 2
+      until: ext_health.status == 200
       changed_when: false
+      when:
+        - not (use_internal_tls | bool)
+        - not _host_is_ipv4
 
+    - name: Probe Caddy /health over HTTPS (externo, IP sin ACME)
+      ansible.builtin.uri:
+        url: "https://{{ wg_public_host }}/health"
+        method: GET
+        status_code: 200
+        validate_certs: false
+        return_content: false
+        timeout: 5
+      register: ext_ip_health
+      retries: 12
+      delay: 2
+      until: ext_ip_health.status == 200
+      changed_when: false
+      when:
+        - not (use_internal_tls | bool)
+        - _host_is_ipv4
+
+    # ====== INTERNO (TLS interno de Caddy) ======
+    - name: Definir ruta a la CA interna de Caddy
+      ansible.builtin.set_fact:
+        caddy_ca: "{{ deploy_dir }}/caddy_data/caddy/pki/authorities/local/root.crt"
+
+    # Caso 1: wg_public_host es FQDN → loopback + SNI correcto con --resolve
+    - name: Probe Caddy /health (TLS interno, FQDN con loopback+SNI)
+      ansible.builtin.command: >
+        curl -ksS --fail --max-time 5
+        --resolve "{{ wg_public_host }}:443:127.0.0.1"
+        --cacert "{{ caddy_ca }}"
+        https://{{ wg_public_host }}/health
+      register: local_health_fqdn
+      retries: 12
+      delay: 2
+      until: local_health_fqdn.rc == 0
+      changed_when: false
+      when:
+        - use_internal_tls | bool
+        - not _host_is_ipv4
+
+    # Caso 2: wg_public_host es IP → usar sitio localhost (requiere bloque 'localhost' en Caddyfile.internal)
+    - name: Probe Caddy /health (TLS interno, localhost IPv4)
+      ansible.builtin.command: >
+        curl -4 -ksS --fail --max-time 5
+        --resolve "localhost:443:127.0.0.1"
+        --cacert "{{ caddy_ca }}"
+        https://localhost/health
+      register: local_health_localhost
+      retries: 12
+      delay: 2
+      until: local_health_localhost.rc == 0
+      changed_when: false
+      when:
+        - use_internal_tls | bool
+        - _host_is_ipv4
 
     - name: Mostrar estado de contenedores
       ansible.builtin.command: docker compose ps
@@ -149,7 +199,7 @@
         chdir: "{{ deploy_dir }}"
       register: compose_ps
       changed_when: false
-
+      
     - name: Resumen del stack
       ansible.builtin.debug:
         msg:

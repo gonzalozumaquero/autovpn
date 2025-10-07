@@ -1,5 +1,7 @@
 ---
-# Crear estructura /opt/autovpn
+# roles/reverse_proxy/tasks/main.yml
+
+# === Estructura de directorios en el target ===
 - name: Crear estructura de reverse_proxy y volúmenes
   ansible.builtin.file:
     path: "{{ item }}"
@@ -11,51 +13,82 @@
     - "{{ deploy_dir }}/caddy_data"
     - "{{ deploy_dir }}/caddy_config"
 
-# Determinar el nombre del Caddyfile según TLS interno o externo
-- name: Seleccionar nombre de Caddyfile
+# === Selección del Caddyfile según TLS ===
+- name: Seleccionar nombre de Caddyfile (interno vs externo)
   ansible.builtin.set_fact:
-    caddyfile_name: "{{ (use_internal_tls | default(true)) | ternary('Caddyfile.internal','Caddyfile') }}"
+    caddyfile_name: "{{ (use_internal_tls | default(true)) | ternary('Caddyfile.internal', 'Caddyfile') }}"
 
-# Comprobar si existe en la copia de stack (lado controlador)
+# === Comprobaciones en el CONTROLADOR (installer) ===
 - name: Comprobar Caddyfile en stack_src_dir (controlador)
   ansible.builtin.stat:
     path: "{{ stack_src_dir }}/reverse-proxy/{{ caddyfile_name }}"
   register: caddy_in_stack
   delegate_to: localhost
   run_once: true
+  changed_when: false
 
-# Comprobar si existe en files/ del rol (fallback, lado controlador también)
 - name: Comprobar Caddyfile en files/ del rol (controlador)
   ansible.builtin.stat:
     path: "{{ role_path }}/files/{{ caddyfile_name }}"
-  register: caddy_in_role
+  register: caddy_in_role_files
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+
+- name: Comprobar Caddyfile en templates/ del rol (controlador)
+  ansible.builtin.stat:
+    path: "{{ role_path }}/templates/{{ caddyfile_name }}.j2"
+  register: caddy_in_role_tpl
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+
+# === Validación de disponibilidad de origen ===
+- name: Fallar si no hay ningún Caddyfile disponible
+  ansible.builtin.fail:
+    msg: >-
+      No se encontró {{ caddyfile_name }} en:
+      - {{ stack_src_dir }}/reverse-proxy/
+      - {{ role_path }}/files/
+      - {{ role_path }}/templates/{{ caddyfile_name }}.j2
+  when: not (caddy_in_stack.stat.exists or caddy_in_role_files.stat.exists or caddy_in_role_tpl.stat.exists)
   delegate_to: localhost
   run_once: true
 
-# Elegir origen (ruta en el CONTROLADOR)
-- name: Definir ruta origen del Caddyfile
-  ansible.builtin.set_fact:
-    caddyfile_src: >-
-      {{ (caddy_in_stack.stat.exists)
-          | ternary(stack_src_dir ~ '/reverse-proxy/' ~ caddyfile_name,
-                    role_path ~ '/files/' ~ caddyfile_name) }}
-
-# Validar
-- name: Validar disponibilidad del Caddyfile de origen
-  ansible.builtin.fail:
-    msg: >-
-      No se encontró {{ caddyfile_name }} ni en {{ stack_src_dir }}/reverse-proxy/
-      ni en {{ role_path }}/files/. Asegúrate de tenerlo en alguno de esos sitios.
-  when: not (caddy_in_stack.stat.exists or caddy_in_role.stat.exists)
-
-# Copiar SIEMPRE como /opt/autovpn/reverse-proxy/Caddyfile (src se lee en el controlador)
-- name: Copiar Caddyfile al servidor
+# === Copia / Renderizado al servidor ===
+- name: Copiar Caddyfile desde stack_src_dir (controlador → remoto)
   ansible.builtin.copy:
-    src: "{{ caddyfile_src }}"
+    src: "{{ stack_src_dir }}/reverse-proxy/{{ caddyfile_name }}"
     dest: "{{ deploy_dir }}/reverse-proxy/Caddyfile"
     mode: "0644"
+  when: caddy_in_stack.stat.exists
+  register: caddy_copy_from_stack
 
-- name: Asegurar ownership para Caddy
+- name: Copiar Caddyfile desde files/ del rol (controlador → remoto)
+  ansible.builtin.copy:
+    src: "{{ role_path }}/files/{{ caddyfile_name }}"
+    dest: "{{ deploy_dir }}/reverse-proxy/Caddyfile"
+    mode: "0644"
+  when: not caddy_in_stack.stat.exists and caddy_in_role_files.stat.exists
+  register: caddy_copy_from_role
+
+- name: Renderizar Caddyfile desde template del rol (controlador → remoto)
+  ansible.builtin.template:
+    src: "{{ role_path }}/templates/{{ caddyfile_name }}.j2"
+    dest: "{{ deploy_dir }}/reverse-proxy/Caddyfile"
+    mode: "0644"
+  when: not caddy_in_stack.stat.exists and not caddy_in_role_files.stat.exists and caddy_in_role_tpl.stat.exists
+  register: caddy_tpl_from_role
+
+# Marcar si cambió
+- name: Marcar cambio en Caddyfile
+  ansible.builtin.set_fact:
+    reverse_proxy_changed: "{{ (caddy_copy_from_stack is defined and caddy_copy_from_stack.changed)
+                              or (caddy_copy_from_role is defined and caddy_copy_from_role.changed)
+                              or (caddy_tpl_from_role is defined and caddy_tpl_from_role.changed) | default(false) }}"
+
+# === Permisos para volúmenes (compatibles con contenedor Caddy) ===
+- name: Asegurar ownership (UID/GID 1000) en data/config
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
@@ -66,12 +99,19 @@
     - "{{ deploy_dir }}/caddy_data"
     - "{{ deploy_dir }}/caddy_config"
 
-# (Opcional) Mostrar resumen útil
+# === Resumen útil ===
 - name: Resumen reverse_proxy
   ansible.builtin.debug:
     msg:
       - "Directorio de despliegue: {{ deploy_dir }}"
-      - "Caddyfile origen (controlador): {{ caddyfile_src }}"
-      - "Caddyfile destino (remoto): {{ deploy_dir }}/reverse-proxy/Caddyfile"
+      - "Caddyfile seleccionado: {{ caddyfile_name }}"
+      - "Origen: {{
+            caddy_in_stack.stat.exists
+            | ternary(stack_src_dir ~ '/reverse-proxy/' ~ caddyfile_name,
+              caddy_in_role_files.stat.exists
+              | ternary(role_path ~ '/files/' ~ caddyfile_name,
+                role_path ~ '/templates/' ~ caddyfile_name ~ '.j2')) }}"
+      - "Destino: {{ deploy_dir }}/reverse-proxy/Caddyfile"
       - "TLS: {{ (use_internal_tls | default(true)) | ternary('interno','externo/ACME') }}"
+      - "Caddyfile cambiado: {{ reverse_proxy_changed | default(false) }}"
 

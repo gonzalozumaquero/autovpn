@@ -60,6 +60,8 @@ output/
 # APARTADO ESPECIFICO DE PROYECTO 
 
 # Inventario y secretos reales
+ansible/artifacts/
+deploy/compose/ansible/
 ansible/inventories/*.ini
 !ansible/inventories/*.ini.example
 ansible/group_vars/*.yml
