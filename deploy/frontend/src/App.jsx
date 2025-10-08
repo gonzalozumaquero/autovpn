@@ -1,12 +1,11 @@
-// src/App.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-/** Paleta y estilos base */
+// PALETA
 const COLORS = {
   text: "#ffffff",
   subtext: "#ffffff",
-  orange: "#ff7a18",     // naranja tecnológico
-  border: "#ffffff",     // perfil de caja
+  orange: "#ff7a18",    
+  border: "#ffffff",     
   inputBg: "transparent",
   inputBorder: "#404757",
   inputText: "#e6edf3",
@@ -40,21 +39,21 @@ const rowStyle = {
 };
 
 const sectionStyle = {
-  border: `1px solid ${COLORS.border}`, // perfil en blanco
+  border: `1px solid ${COLORS.border}`,
   borderRadius: 12,
   padding: 16,
   marginTop: 16,
-  background: "transparent",           // interior transparente (fondo oscuro visible)
+  background: "transparent",       
 };
 
 const sectionTitleStyle = {
   marginTop: 0,
   marginBottom: 12,
-  color: COLORS.orange,                // títulos de cajas en naranja
+  color: COLORS.orange,             
   fontWeight: 700,
 };
 
-/** Utilidades */
+// UTILIDADES
 function b64Random(bytes = 48) {
   const arr = new Uint8Array(bytes);
   crypto.getRandomValues(arr);
@@ -116,12 +115,12 @@ export default function App() {
 
   // Transporte (auto / manual + udp2raw extra)
   const [transport, setTransport] = useState({
-    mode: "auto",                 // "auto" | "manual"
-    profile: "WG_UDP_51820",      // usado solo si mode === "manual"
+    mode: "auto",                 // es "auto" o "manual"
+    profile: "WG_UDP_51820",      // solo si mode === "manual"
     udp2raw: {
       enabled: false,             // true si profile === "WG_UDP2RAW_443"
-      password: "",               // opcional
-      mtu: ""                     // opcional
+      password: "",              
+      mtu: ""                    
     }
   });
 
@@ -205,96 +204,150 @@ export default function App() {
   // === Guardar config ===
   
   async function writeConfig() {
-	  if (!canProceedStep1) {
-		alert("Revisa datos: IP, usuario, puerto, credencial SSH (password o .pem) y credenciales admin.");
-		return;
-	  }
-	  setConfigOk(null);
+      if (!canProceedStep1) {
+         alert("Revisa datos: IP, usuario, puerto, credencial SSH (password o .pem) y credenciales admin.");
+         return;
+      }
+      setConfigOk(null);
 
-	  try {
-		// Normalización
-		const ip = (serverIp || "").trim();
-		const user = (sshUser || "ubuntu").trim();
+      try {
+         // Normalización
+         const ip = (serverIp || "").trim();
+         const user = (sshUser || "ubuntu").trim();
 
-		const p = Number(sshPort);
-		const portSSH = Number.isFinite(p) && p > 0 ? p : 22;
+         const p = Number(sshPort);
+         const portSSH = Number.isFinite(p) && p > 0 ? p : 22;
 
-		const wgP = Number(wgPort);
-		const wgPortSafe = Number.isFinite(wgP) && wgP > 0 ? wgP : 51820;
+         const wgP = Number(wgPort);
+         const wgPortSafe = Number.isFinite(wgP) && wgP > 0 ? wgP : 51820;
 
-		const payload = {
-		  ssh: {
-			elastic_ip: ip,
-			user,
-			ssh_port: portSSH,
-		  },
-		  vars: {
-			use_internal_tls: !!useInternalTLS,
-			wg_public_host: (wgPublicHost || ip).trim(),
-			wg_port: wgPortSafe,
-			wg_subnet: (wgSubnet || "").trim(),
-			wg_dns: (wgDNS || "").trim(),
-			jwt_secret: (jwtSecret || "").trim(),
-			timezone: (timezone || "").trim(),
-			admin_email: (adminEmail || "").trim(),
-			admin_password: (adminPassword || "").trim(),
-		  },
-		  // No enviar campos extra si la API no los define (p. ej. transport)
-		};
+         const payload = {
+         ssh: {
+            elastic_ip: ip,
+            user,
+            ssh_port: portSSH,
+         },
+         vars: {
+            use_internal_tls: !!useInternalTLS,
+            wg_public_host: (wgPublicHost || ip).trim(),
+            wg_port: wgPortSafe,
+            wg_subnet: (wgSubnet || "").trim(),
+            wg_dns: (wgDNS || "").trim(),
+            jwt_secret: (jwtSecret || "").trim(),
+            timezone: (timezone || "").trim(),
+            admin_email: (adminEmail || "").trim(),
+            admin_password: (adminPassword || "").trim(),
+         },
+         // No se envían campos extra si la API no los define 
+         };
 
-		// Sólo una credencial SSH
-		if (usingPem) {
-		  const key = pemText || "";
-		  if (!key) throw new Error("La clave PEM está vacía.");
-		  payload.ssh.pem = key;
-		} else {
-		  const pass = (sshPassword || "").trim();
-		  if (!pass) throw new Error("La contraseña SSH está vacía.");
-		  payload.ssh.ssh_password = pass;
-		}
+         // Sólo una credencial SSH
+         if (usingPem) {
+         const key = pemText || "";
+         if (!key) throw new Error("La clave PEM está vacía.");
+         payload.ssh.pem = key;
+         } else {
+         const pass = (sshPassword || "").trim();
+         if (!pass) throw new Error("La contraseña SSH está vacía.");
+         payload.ssh.ssh_password = pass;
+         }
 
-		// Validación mínima local
-		const required = [
-		  payload.ssh.elastic_ip,
-		  payload.vars.wg_public_host,
-		  payload.vars.wg_subnet,
-		  payload.vars.wg_dns,
-		  payload.vars.jwt_secret,
-		  payload.vars.timezone,
-		  payload.vars.admin_email,
-		  payload.vars.admin_password,
-		];
-		if (required.some(v => !v)) {
-		  throw new Error("Faltan campos requeridos en la configuración.");
-		}
+         // Validación mínima local
+         const required = [
+         payload.ssh.elastic_ip,
+         payload.vars.wg_public_host,
+         payload.vars.wg_subnet,
+         payload.vars.wg_dns,
+         payload.vars.jwt_secret,
+         payload.vars.timezone,
+         payload.vars.admin_email,
+         payload.vars.admin_password,
+         ];
+         if (required.some(v => !v)) {
+         throw new Error("Faltan campos requeridos en la configuración.");
+         }
 
-		const res = await fetch("/install/config", {
-		  method: "POST",
-		  headers: { "Content-Type": "application/json" },
-		  body: JSON.stringify(payload),
-		});
+         const res = await fetch("/install/config", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify(payload),
+         });
 
-		const text = await res.text();
-		let data = {};
-		try { data = text ? JSON.parse(text) : {}; } catch {}
+         const text = await res.text();
+         let data = {};
+         try { data = text ? JSON.parse(text) : {}; } catch {}
 
-		if (!res.ok || data.ok === false) {
-		  const detail = data.detail ? JSON.stringify(data.detail) : text || `HTTP ${res.status}`;
-		  throw new Error(detail);
-		}
+         if (!res.ok || data.ok === false) {
+         const detail = data.detail ? JSON.stringify(data.detail) : text || `HTTP ${res.status}`;
+         throw new Error(detail);
+         }
 
-		setConfigOk(true);
-		setAdminPassword(""); setAdminPassword2("");
-		setStep(3);
-	  } catch (e) {
-		console.error(e);
-		const msg = e instanceof Error ? e.message : String(e);
-		alert(`No se pudo guardar la configuración:\n${msg}`);
-		setConfigOk(false);
-	  }
-  }
+         setConfigOk(true);
+         setAdminPassword(""); setAdminPassword2("");
+         setStep(3);
+      } catch (e) {
+         console.error(e);
+         const msg = e instanceof Error ? e.message : String(e);
+         alert(`No se pudo guardar la configuración:\n${msg}`);
+         setConfigOk(false);
+      }
+   }
 
+  const [downloading, setDownloading] = React.useState(false);
+  const [downloadError, setDownloadError] = React.useState("");
 
+   // === DESCARGA CERT ===
+   async function handleDownloadCert() {
+   try {
+      setDownloadError("");
+      if (!serverIp) throw new Error("Falta la IP del servidor.");
+      if (!sshUser) throw new Error("Falta el usuario SSH.");
+
+      // Construye el payload SSH igual que en testSSH/runInstall
+      const sshPayload = {
+         elastic_ip: serverIp.trim(),
+         user: sshUser.trim() || "ubuntu",
+         ssh_port: Number(sshPort) || 22,
+      };
+
+      if (usingPem) {
+         if (!pemText) throw new Error("Debes proporcionar la clave PEM.");
+         sshPayload.pem = pemText;
+      } else {
+         if (!sshPassword) throw new Error("Debes proporcionar la contraseña SSH.");
+         sshPayload.ssh_password = sshPassword;
+      }
+
+      setDownloading(true);
+
+      // Mantén rutas relativas como en el resto del código
+      const res = await fetch("/install/download-cert", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify({ ssh: sshPayload }),
+      });
+
+      if (!res.ok) {
+         const msg = await res.text().catch(() => "");
+         throw new Error(msg || "Error en la descarga del certificado");
+      }
+
+      // Descargar el fichero
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "root.crt";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+   } catch (e) {
+      setDownloadError(e?.message || "No se pudo descargar el certificado");
+   } finally {
+      setDownloading(false);
+   }
+   }
   // === Ejecutar instalación (SSE logs) ===
   async function runInstall() {
     setInstalling(true);
@@ -725,29 +778,49 @@ export default function App() {
 
       {/* Paso final */}
       {step === 4 && (
-        <div>
-          <h2 style={{ color: COLORS.orange }}>Paso 3 · ¡Listo!</h2>
-          <p style={{ color: COLORS.subtext }}>
-            Abre el panel del servidor (Fase 2: login+2FA, crear dispositivo, descargar .conf/QR).
-          </p>
-          <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
-            <a href={serverUrl || `https://${serverIp}/`} target="_blank" rel="noreferrer">
-              <button>Abrir panel del servidor</button>
-            </a>
-            {useInternalTLS && (
-              <small style={{ color: COLORS.subtext }}>
-                TLS interno: instala la CA de Caddy para evitar avisos.
-              </small>
-            )}
-          </div>
-          <div style={{ marginTop: 16 }}>
-            <button onClick={() => { setStep(1); setLogs(""); setServerUrl(""); }}>
-              Repetir instalación / otro servidor
-            </button>
-          </div>
-        </div>
+      <div>
+         <h2 style={{ color: COLORS.orange }}>Paso 3 · ¡Listo!</h2>
+         <p style={{ color: COLORS.subtext }}>
+         Abre el panel del servidor (Fase 2: login+2FA, crear dispositivo, descargar .conf/QR).
+         </p>
+
+         <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
+         <a
+               href={serverUrl || (serverIp ? `https://${serverIp}/` : "#")}
+               target="_blank"
+               rel="noopener noreferrer"
+         >
+               <button> Abrir panel del servidor </button>
+         </a>
+
+         {useInternalTLS && (
+               <small style={{ color: COLORS.subtext }}>
+               TLS interno: instala la CA de Caddy para evitar avisos.
+               </small>
+         )}
+         </div>
+
+         <div style={{ marginTop: 16 }}>
+         <button onClick={() => { setStep(1); setLogs(""); setServerUrl(""); }}>
+               Repetir instalación / otro servidor
+         </button>
+         </div>
+
+         {useInternalTLS && (
+         <div style={{ marginTop: 20 }}>
+               <button onClick={handleDownloadCert} disabled={downloading}>
+               {downloading ? "Descargando…" : "Descargar Certificado"}
+               </button>
+               {downloadError && (
+               <div style={{ color: "crimson", marginTop: 8 }}>{downloadError}</div>
+               )}
+         </div>
+         )}
+      </div>
       )}
     </div>
   );
 }
+
+
 

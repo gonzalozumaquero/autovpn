@@ -12,6 +12,11 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from datetime import datetime
+from fastapi import APIRouter, HTTPException, Body, BackgroundTasks
+from fastapi.responses import FileResponse
+from pathlib import Path
+import asyncio, tempfile, os, stat, uuid
+
 
 # ===== Pydantic compat v1/v2 =====
 try:
@@ -149,6 +154,129 @@ def next_temp_id() -> str:
 # =========================
 # Endpoints
 # =========================
+from fastapi import APIRouter, HTTPException, Response
+from pydantic import BaseModel, Field
+import paramiko, tempfile, os
+
+CERT_PATH = "/opt/autovpn/caddy_data/caddy/pki/authorities/local/root.crt"
+
+class SSHCreds(BaseModel):
+    elastic_ip: str = Field(..., description="IP/Elastic IP del servidor")
+    user: str = Field("ubuntu", description="Usuario SSH")
+    ssh_port: int = Field(22, description="Puerto SSH")
+    pem: str | None = Field(None, description="Contenido PEM (opcional)")
+    ssh_password: str | None = Field(None, description="Contraseña SSH (opcional)")
+
+class DownloadCertRequest(BaseModel):
+    ssh: SSHCreds
+
+def _connect(ssh: SSHCreds) -> paramiko.SSHClient:
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    connect_kwargs = dict(
+        hostname=ssh.elastic_ip,
+        username=ssh.user,
+        port=ssh.ssh_port,
+        allow_agent=False,
+        look_for_keys=False,
+        banner_timeout=10,
+        auth_timeout=15,
+        timeout=15,
+    )
+    tmp_key_path = None
+    try:
+        if ssh.pem:
+            # Guardar PEM a un fichero temporal con permisos 0600
+            tf = tempfile.NamedTemporaryFile("w", delete=False)
+            tf.write(ssh.pem.strip() + "\n")
+            tf.flush()
+            tf.close()
+            tmp_key_path = tf.name
+            os.chmod(tmp_key_path, 0o600)
+            connect_kwargs["key_filename"] = tmp_key_path
+        elif ssh.ssh_password:
+            connect_kwargs["password"] = ssh.ssh_password
+        else:
+            raise HTTPException(status_code=400, detail="Debes proporcionar pem o ssh_password.")
+
+        client.connect(**connect_kwargs)
+        return client
+    except Exception:
+        # Limpia el fichero temporal si lo hubo
+        if tmp_key_path and os.path.exists(tmp_key_path):
+            try: os.remove(tmp_key_path)
+            except: pass
+        raise
+    finally:
+        # Guarda la ruta en el propio objeto para borrarla tras el uso (feíllo pero práctico)
+        ssh._tmp_key_path = tmp_key_path  # type: ignore[attr-defined]
+
+def _cleanup_keyfile(ssh: SSHCreds):
+    tmp = getattr(ssh, "_tmp_key_path", None)
+    if tmp and os.path.exists(tmp):
+        try: os.remove(tmp)
+        except: pass
+
+@router.post("/install/download-cert")
+def download_cert(req: DownloadCertRequest):
+    """
+    Descarga la CA local de Caddy desde el servidor remoto vía SSH.
+    Devuelve 'root.crt' como attachment.
+    """
+    ssh = req.ssh
+    client = None
+    try:
+        client = _connect(ssh)
+
+        # 1) Intento sin interacción (sudo -n). Requiere NOPASSWD.
+        cmd = f"sudo -n cat {CERT_PATH}"
+        stdin, stdout, stderr = client.exec_command(cmd, timeout=15)
+        rc = stdout.channel.recv_exit_status()
+        out = stdout.read()
+        err = stderr.read().decode(errors="ignore")
+
+        # 2) Si sudo pide password y tenemos ssh_password, reintenta con -S metiendo la pass por stdin
+        if rc != 0 and ("a password is required" in err or "password is required" in err or "permission denied" in err.lower()):
+            if ssh.ssh_password:
+                cmd2 = f"sudo -S -p '' cat {CERT_PATH}"
+                stdin2, stdout2, stderr2 = client.exec_command(cmd2, get_pty=True, timeout=20)
+                # Pasar la contraseña a sudo
+                stdin2.write(ssh.ssh_password + "\n")
+                stdin2.flush()
+                rc = stdout2.channel.recv_exit_status()
+                out = stdout2.read()
+                err = stderr2.read().decode(errors="ignore")
+
+        if rc != 0 or not out:
+            raise HTTPException(status_code=500, detail=f"No se pudo leer el certificado: {err.strip() or 'error desconocido'}")
+
+        # Entregar como descarga
+        headers = {"Content-Disposition": 'attachment; filename="root.crt"'}
+        # application/x-x509-ca-cert o application/x-pem-file; cualquiera funciona
+        return Response(content=out, media_type="application/x-x509-ca-cert", headers=headers)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Fallo SSH/descarga: {str(e)}")
+    finally:
+        _cleanup_keyfile(ssh)
+        if client:
+            try: client.close()
+            except: pass
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 @router.post("/install/check-ssh")
 async def check_ssh(ssh: SSHConfig):
