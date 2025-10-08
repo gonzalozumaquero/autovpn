@@ -1,169 +1,189 @@
 # AutoVPN Platform
 
-**AutoVPN** es una plataforma para desplegar y gestionar servidores VPN personales de forma automatizada. Combina Ansible y Docker para ofrecer un flujo guiado en dos fases: instalación asistida desde tu equipo y posterior uso del panel web del servidor para crear clientes WireGuard (QR/.conf).
+**AutoVPN** es una plataforma para desplegar y gestionar servidores VPN personales de forma automatizada. Orquesta **Ansible** y **Docker** para ofrecer un flujo guiado en dos fases: instalación asistida desde tu equipo y posterior uso del panel web del servidor para crear clientes WireGuard (QR y `.conf`).
 
 ---
 
 ## Características
 
-- Despliegue reproducible con **Ansible** (bootstrap del host y stack de contenedores).
-- Servidor VPN **WireGuard** (plan para añadir OpenVPN/SoftEther).
-- **Frontend** web para onboarding en 3 pasos (admin + 2FA → crear servidor → alta de cliente).
-- **Instalación asistida**: backend y frontend locales que orquestan Ansible y muestran el progreso.
-- Dos modos de TLS en el proxy:
-  - **ACME/Let’s Encrypt** (con dominio).
-  - **TLS interno** con **Caddy** (sin dominio, CA interna).
-- Seguridad por defecto: UFW, SSH endurecido, JWT secreto, 2FA (TOTP), volúmenes persistentes.
-
----
-
-## Arquitectura (resumen)
-
-```
-[Equipo del usuario]                         [EC2 Ubuntu 22.04]
-installer-local/frontend  ----->  installer-local/backend
-          |                                 |                     | (SSE/HTTP)                      |            \  ansible-playbook
-          v                                 |                Progreso instalación                      +----> roles (common, docker, reverse_proxy, autovpn_stack)
-                                                                                             +----> docker compose (caddy, backend, frontend, wireguard)
-```
-
----
-
-## Estructura del repositorio
-
-```
-autovpn/
-├─ ansible/                    # Infra y app como código (un directorio, dos playbooks)
-│  ├─ inventories/
-│  │  ├─ cloud.ini.example
-│  │  └─ local.ini.example
-│  ├─ group_vars/
-│  │  ├─ cloud.yml.example
-│  │  └─ local.yml.example
-│  ├─ roles/
-│  │  ├─ common/              # UFW, SSH hardening, ip_forward, timezone
-│  │  ├─ docker/              # Docker CE + compose plugin
-│  │  ├─ reverse_proxy/       # Caddy + volúmenes + Caddyfile (interno/ACME)
-│  │  ├─ autovpn_stack/       # Copia stack/, genera .env y docker compose up -d
-│  │  └─ backup/              # (opcional) service/timer para S3/rclone
-│  ├─ site-deploy.yml         # Bootstrap del host (common, docker)
-│  └─ site-stack.yml          # Despliegue de la app (reverse_proxy, autovpn_stack, backup)
-├─ deploy/                    # Instalación asistida (local)
-│  ├─ api/                    # FastAPI: genera inventario y vars, lanza Ansible, expone logs
-│  └─ frontend/               # UI local para pedir IP/PEM y pulsar “Instalar”
-├─ stack/                     # Artefactos de la app desplegados en /opt/autovpn del servidor
-│  ├─ docker-compose.yml
-│  └─ reverse-proxy/
-│     ├─ Caddyfile            # dominio + ACME
-│     └─ Caddyfile.internal   # :443 + tls internal
-└─ README.md
-```
-
----
-
-## Flujo de instalación (asistida)
-
-**Fase 1 – Instalación asistida desde tu equipo**
-1. Levanta el installer-local:
-   - `deploy/api`: expone endpoints para:
-     - Generar `ansible/inventories/cloud.ini` desde `cloud.ini.example` y rellenar IP + ruta al `.pem`.
-     - Escribir `ansible/group_vars/cloud.yml` desde `cloud.yml.example` (sustituye `wg_public_host`, puertos, `jwt_secret`, etc.).
-     - Ejecutar `ansible/site-deploy.yml` y luego `ansible/site-stack.yml`, emitiendo logs (SSE/WebSocket).
-   - `deploy/frontend`: formulario para Elastic IP, usuario SSH (ubuntu), PEM y parámetros (TLS interno, WG_*…); botón **Instalar** y visor de progreso.
-2. Al finalizar, el backend devuelve la URL del panel remoto (`https://<IP-o-dominio>/`).
-3. Si usas **TLS interno**, exporta la CA del servidor:
-   - En la EC2: `/opt/autovpn/caddy_data/pki/authorities/local/root.crt`.
-   - Instálala como CA de confianza en tus dispositivos para evitar avisos.
-
-**Fase 2 – Onboarding en el servidor**
-1. Accede al frontend del servidor.
-2. Alta de admin + 2FA/TOTP.
-3. Crear servidor WireGuard (wg0) y añadir cliente.
-4. Descarga `.conf` o escanea QR; conecta desde la app WireGuard.
+- **Despliegue reproducible** con Ansible: bootstrap del host y stack de contenedores.
+- **WireGuard** como VPN principal. Diseño extensible para protocolos adicionales.
+- **UI del servidor** para alta de administrador, 2FA TOTP, creación de peers y descarga de perfiles.
+- **Instalación asistida**: UI+API locales que ejecutan Ansible y muestran logs en vivo.
+- **TLS** en el proxy Caddy:
+  - **ACME/Let’s Encrypt** cuando hay dominio público.
+  - **TLS interno** con CA propia de **Caddy** cuando solo hay IP.
+- Seguridad por defecto: UFW, SSH endurecido, secreto JWT, 2FA, volúmenes persistentes.
 
 ---
 
 ## Requisitos
 
-- Máquina de control (tu equipo) con:
-  - Python 3.10+, Ansible ≥ 9, Docker (si pruebas local).
+- **Máquina de control** (tu equipo):
+  - Python 3.10+, Ansible ≥ 9, Docker y Docker Compose.
   - Clave SSH `.pem` con permisos `600`.
-- AWS EC2 Ubuntu 22.04, Security Group con **22/tcp**, **443/tcp**, **51820/udp** (y **80/tcp** solo si usas ACME).
-- (Opcional) Dominio apuntando a la Elastic IP (si usas ACME).
+- **Servidor destino** (p. ej., AWS EC2 Ubuntu 22.04/24.04):
+  - Security Group / firewall con **22/tcp**, **443/tcp**, **51820/udp** abiertos.
+  - **80/tcp** temporal si vas a usar ACME.
+- (Opcional) **FQDN** apuntando a la IP pública si eliges ACME.
 
 ---
 
-## Configuración
+## Estructura principal del repositorio y contenido del proyecto
 
-1. Copia los ejemplos y complétalos:
-   ```bash
-   cp ansible/inventories/cloud.ini.example ansible/inventories/cloud.ini
-   cp ansible/group_vars/cloud.yml.example ansible/group_vars/cloud.yml
-   ```
-   - Sustituye `ELASTIC_IP` y la ruta del `.pem` en `cloud.ini`.
-   - En `cloud.yml` define:
-     - `use_internal_tls: true|false`
-     - `wg_public_host: "<Elastic_IP|dominio>"`
-     - `wg_port`, `wg_subnet`, `wg_dns`, `jwt_secret`, `timezone`, `s3_bucket`
+```
+autovpn/                                 # Raíz del proyecto
+├── ansible/                             # Playbooks, inventarios y roles para el despliegue con Ansible
+│   ├── group_vars/                      # Variables de grupo (p.ej. cloud.yml) usadas por los playbooks
+│   ├── inventories/                     # Inventarios de hosts
+│   │   └── cloud/                       # Inventario/plantillas para el host “cloud” (EC2 u otro VPS)
+│   └── roles/                           # Roles Ansible (tareas reutilizables)
+│       ├── autovpn_stack/               # Copia/plantillas del stack, render de .env y ‘docker compose up’
+│       ├── backup/                      # Tareas de backup (rclone/awscli, cron/timers, sincronización de volúmenes)
+│       ├── common/                      # Endurecimiento base: UFW, SSH, sysctl, timezone, paquetes básicos
+│       ├── docker/                      # Instalación y configuración de Docker Engine + plugin compose
+│       └── reverse_proxy/               # Despliegue de Caddy y Caddyfile (interno/ACME), volúmenes y validaciones
+├── deploy/                              # “Installer” local (fase 1): API + UI + composables para orquestar Ansible
+│   ├── api/                             # Backend del instalador (p.ej. FastAPI)
+│   │   ├── routers/                     # Endpoints: check-ssh, config, run, logs, download-cert, etc.
+│   │   └── state/                       # Estado de ejecuciones (run_id, colas de logs, caché temporal)
+│   ├── compose/                         # Archivos docker-compose para levantar el instalador local
+│   │   ├── ansible/                     # Servicios/volúmenes específicos para la CLI de Ansible dentro del installer
+│   │   ├── deploy/                      # Composes/ficheros asociados a la fase “deploy” (bootstrap del host)
+│   │   └── stack/                       # Composes/ficheros asociados a la fase “stack” (contenedores del servidor)
+│   └── frontend/                        # UI del instalador (React)
+│       └── src/                         # Código fuente (App.jsx, componentes, estilos, utilidades)
+└── stack/                               # Artefactos del stack remoto (fase 2): backend, proxy, etc.
+    ├── backend/                         # Backend del servidor (API + lógica de panel)
+    │   └── app/                         # Código de la aplicación (routers, modelos, servicios, requirements, etc.)
+    └── reverse-proxy/                   # Configuración de Caddy para el servidor (Caddyfile / Caddyfile.internal)
 
-2. (Opcional) Cifra `cloud.yml` con Ansible Vault:
-   ```bash
-   ansible-vault encrypt ansible/group_vars/cloud.yml
-   # y ejecuta con --ask-vault-pass o --vault-password-file
-   ```
+
+```
+
+---
+
+## Instalación asistida con Docker
+
+1) Clona y entra al repositorio:
+```bash
+git clone <URL_DEL_REPOSITORIO>
+cd autovpn
+```
+
+2) Arranca el instalador local:
+```bash
+docker compose -f deploy/compose/docker-compose.yml up -d --build
+```
+
+3) Abre el **Installer UI** en tu navegador (p. ej. `http://localhost:5173`) y completa:
+- IP del servidor, usuario SSH, credencial (password o `.pem`).
+- Parámetros del stack: `use_internal_tls`, `wg_public_host`, `wg_port`, `wg_subnet`, `wg_dns`, `jwt_secret`, `timezone`, etc.
+- **Probar SSH** → **Guardar configuración** → **Instalar**. Verás los logs en vivo.
+
+4) Cuando termine, abre el panel remoto: `https://<IP-o-dominio>/`.
+
+5) Si usas **TLS interno**, instala la CA del servidor para evitar avisos:
+- Descarga desde el propio instalador si aparece el botón **Descargar certificado**; o bien:
+```bash
+scp ubuntu@<IP_SERVIDOR>:/opt/autovpn/caddy_data/caddy/pki/authorities/local/root.crt ./autovpn-root.crt
+```
+- Importa esa CA en tu sistema (Keychain en macOS, `update-ca-certificates` en Debian/Ubuntu, almacén de certificados en Windows).
 
 ---
 
 ## Ejecución manual (sin instalador)
 
-Bootstrap del host
+1) Copia y ajusta inventario y variables:
 ```bash
-ansible-playbook -i ansible/inventories/cloud.ini ansible/site-deploy.yml --ask-vault-pass
+cp ansible/inventories/cloud.ini.example ansible/inventories/cloud.ini
+cp ansible/group_vars/cloud.yml.example ansible/group_vars/cloud.yml
+```
+Edita:
+- `cloud.ini`: IP pública y ruta al `.pem`.
+- `cloud.yml`: `use_internal_tls`, `wg_public_host`, `wg_port`, `wg_subnet`, `wg_dns`, `jwt_secret`, `timezone`, etc.
+
+2) Bootstrap del host:
+```bash
+ansible-playbook -i ansible/inventories/cloud.ini ansible/site-deploy.yml
 ```
 
-Despliegue del stack
+3) Despliegue del stack:
 ```bash
-ansible-playbook -i ansible/inventories/cloud.ini ansible/site-stack.yml --ask-vault-pass
+ansible-playbook -i ansible/inventories/cloud.ini ansible/site-stack.yml
 ```
 
-Verificación en la EC2
+4) Verificación rápida en el servidor:
 ```bash
-ssh -i ~/.ssh/clave.pem ubuntu@ELASTIC_IP   "ss -lntup | egrep ':(22|80|443|51820)';    docker ps --format 'table {{.Names}}	{{.Status}}	{{.Ports}}'"
+ssh -i ~/.ssh/clave.pem ubuntu@<IP_SERVIDOR> \
+  "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' ; ss -lntp | egrep ':(22|80|443|51820)'"
 ```
 
 ---
 
-## Detalles técnicos
+## Verificación de TLS interno
 
-- reverse_proxy: copia Caddyfile según `use_internal_tls`:
-  - `Caddyfile` (ACME): requiere `domain` y `email_tls`.
-  - `Caddyfile.internal`: escucha en `:443` y usa `tls internal` (CA propia de Caddy).
-- autovpn_stack:
-  - Copia `stack/docker-compose.yml` y `.env.example` a `/opt/autovpn`.
-  - Inyecta variables (`WG_HOST`, `WG_PORT`, `WG_SUBNET`, `WG_DNS`, `JWT_SECRET`, `TZ`, `TOTP_ISSUER`).
-  - Ejecuta `docker compose up -d` para caddy, backend, frontend, wireguard.
-- backup (opcional): instala rclone/awscli, script y systemd timer para sincronizar `/opt/autovpn/{data,wireguard,reverse-proxy}` y ficheros clave.
+**Desde el servidor**:
+```bash
+CA=/opt/autovpn/caddy_data/caddy/pki/authorities/local/root.crt
+curl -4ksS --fail --max-time 5 --http1.1 \
+  --cacert "$CA" \
+  https://localhost/health
+# → ok
+```
+
+**Desde tu equipo** (tras copiar la CA):
+```bash
+# Copia de la CA
+scp ubuntu@<IP_SERVIDOR>:/opt/autovpn/caddy_data/caddy/pki/authorities/local/root.crt ./autovpn-root.crt
+
+# Sonda con SNI=localhost y resolución a la IP pública
+curl -4sS --fail --max-time 5 --http1.1 \
+  --resolve "localhost:443:<IP_SERVIDOR>" \
+  --cacert ./autovpn-root.crt \
+  https://localhost/health
+# → ok
+```
+
+> Nota: con TLS interno, Caddy emite certificados para **localhost** y **127.0.0.1**. Para pruebas remotas con solo IP, fuerza `SNI=localhost` usando `--resolve`.
 
 ---
 
 ## Notas de seguridad
 
-- .gitignore ignora inventarios y variables reales; versiona solo los `.example`. No subas claves `.pem`.
-- Usa Vault para secretos o `encrypt_string` para cifrar campos individuales.
-- Limita 22/tcp en SG a tu IP. Con TLS interno, cierra 80/tcp tras el despliegue.
-- Minimiza capacidades del contenedor de WireGuard:
-  - `NET_ADMIN` es suficiente si el módulo está en el host (`modprobe wireguard`); evita `SYS_MODULE`.
-- Si los peers deben salir a Internet vía el servidor, añade NAT/MASQUERADE persistente.
+- No subas claves `.pem`, inventarios reales ni secretos al control de versiones. Versiona solo los `.example`.
+- Usa **Ansible Vault** para cifrar `group_vars/cloud.yml` si contiene secretos.
+- Restringe **22/tcp** en el Security Group a tu IP de administración.
+- Si usas TLS interno, deshabilitar **80/tcp** tras el despliegue es recomendable.
+- Minimiza capacidades del contenedor de WireGuard. Evita `SYS_MODULE` si no es imprescindible.
 
 ---
 
-## Roadmap
+## Solución de problemas comunes
 
-- Integración OpenVPN/SoftEther opcional.
-- Healthchecks y métricas básicas en la UI (peers activos, última conexión).
-- Instalación self-hosted desde el propio servidor (sin máquina de control).
-- Rotación de claves y perfiles desde UI/cron.
-- Pipeline CI/CD para imágenes y roles.
+- **El instalador muestra 422 en `/install/config`**  
+  Algún campo requerido no llega al API. Revisa en la UI que exista **una sola** credencial SSH (password o `.pem`) y que `admin_email` sea válido y contraseñas coincidan.
+
+- **Caddy responde “TLS alert internal error” al probar `https://127.0.0.1/health`**  
+  Usa `https://localhost/health` con la CA interna. Con una IP, el SNI no coincide y el handshake puede fallar; por eso en el cliente usamos `--resolve "localhost:443:<IP_SERVIDOR>"`.
+
+- **Caddy no se levanta o no escucha 443**  
+  Comprueba:
+  ```bash
+  docker compose logs caddy
+  ss -lntp | grep ':443'
+  ```
+  Revisa el `Caddyfile` montado en `/opt/autovpn/reverse-proxy/Caddyfile` dentro del contenedor:
+  ```bash
+  docker compose exec -T caddy caddy adapt --config /etc/caddy/Caddyfile --pretty
+  ```
+
+- **UFW bloquea tráfico**  
+  Verifica reglas:
+  ```bash
+  sudo ufw status numbered
+  ```
+  Deben estar permitidos `22/tcp`, `443/tcp` y `51820/udp`.
 
 ---
 
@@ -173,7 +193,13 @@ Proyecto de TFM (Universidad Europea, 2024–2025). Arquitectura validada; despl
 
 ---
 
+## Contribuir
+
+¡PRs y propuestas bienvenidas! Abre un issue para discusión y describe claramente el caso de uso, cambios y pruebas.
+
+---
+
 ## Licencia
 
-Este proyecto se distribuye bajo la licencia MIT. Consultar `LICENSE`.
+Distribuido bajo **MIT**. Consulta `LICENSE`.
 
