@@ -67,7 +67,7 @@ autovpn/                                 # Raíz del proyecto
 
 1) Clona y entra al repositorio:
 ```bash
-git clone <URL_DEL_REPOSITORIO>
+git clone https://github.com/gonzalozumaquero/autovpn
 cd autovpn
 ```
 
