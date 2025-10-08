@@ -1,0 +1,38 @@
+# ansible/frontend-only.yml
+- name: "Despliegue SOLO del rol autovpn_frontend"
+  hosts: autovpn
+  become: true
+  gather_facts: false
+
+  pre_tasks:
+    - name: Asegurar que existe el usuario 'autovpn' (para chown del rol)
+      ansible.builtin.user:
+        name: autovpn
+        state: present
+        system: true
+        create_home: false
+        shell: /usr/sbin/nologin
+
+    - name: Crear /opt/autovpn/stack (si no existe)
+      ansible.builtin.file:
+        path: /opt/autovpn/stack
+        state: directory
+        owner: autovpn
+        group: autovpn
+        mode: "0755"
+
+    # (Opcional) comprobar docker compose en el remoto
+    - name: Comprobar docker compose en remoto
+      ansible.builtin.shell: "docker compose version >/dev/null 2>&1"
+      register: dc_ok
+      failed_when: dc_ok.rc != 0
+      changed_when: false
+
+  roles:
+    - role: autovpn_frontend
+      # Si tu rol admite variables, aquí puedes sobreescribirlas.
+      # Por ejemplo, si alguna vez mueves el playbook a ansible/test/,
+      # puedes forzar el src absoluto:
+      # vars:
+      #   frontend_src_dir: "{{ (playbook_dir ~ '/../stack/frontend') | realpath }}"
+

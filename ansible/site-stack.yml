@@ -106,7 +106,7 @@
   roles:
     - role: reverse_proxy      # Caddy + Caddyfile(.internal) + volúmenes
     - role: autovpn_stack      # Copia stack/, genera .env e inicia docker compose
-    - { role: backup, when: s3_bucket is defined and s3_bucket | length > 0 }
+    - role: autovpn_frontend 
 
   post_tasks:
     - name: Wait for Caddy to bind :443 (TCP)

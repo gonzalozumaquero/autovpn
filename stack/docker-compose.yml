@@ -100,6 +100,17 @@ services:
       if [ -n "$UDP2RAW_MTU" ]; then extra="$extra --mtu \"$UDP2RAW_MTU\""; fi
       exec udp2raw -s -l0.0.0.0:443 -r127.0.0.1:$WG_PORT --auth-mode simple --cipher-mode xor --raw-mode faketcp $extra
 
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: autovpn-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - internal
+
 networks:
   internal:
     driver: bridge

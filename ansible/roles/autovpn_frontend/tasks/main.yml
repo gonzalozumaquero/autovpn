@@ -1,0 +1,60 @@
+---
+- name: Definir variables por defecto del rol
+  ansible.builtin.set_fact:
+    sync_src_dir: "{{ sync_src_dir | default(playbook_dir ~ '/../stack/frontend') }}"
+    sync_dst_dir: "{{ sync_dst_dir | default('/opt/autovpn/frontend') }}"
+    sync_owner: "{{ sync_owner | default('ubuntu') }}"
+    sync_group: "{{ sync_group | default('ubuntu') }}"
+    wipe_dest_before_copy: "{{ wipe_dest_before_copy | default(false) }}"
+  tags: [always]
+
+# Asegura el padre /opt/autovpn (sin cambiar su propietario si ya existe)
+- name: Crear /opt/autovpn si no existe
+  ansible.builtin.file:
+    path: "/opt/autovpn"
+    state: directory
+    mode: "0755"
+  become: true
+  tags: [copy_only]
+
+# (Opcional) limpiar destino para evitar restos con propietario anterior (autovpn)
+- name: (Opcional) Eliminar destino antes de copiar
+  ansible.builtin.file:
+    path: "{{ sync_dst_dir }}"
+    state: absent
+  when: wipe_dest_before_copy | bool
+  become: true
+  tags: [copy_only]
+
+# Crear destino con propietario ubuntu
+- name: Crear directorio destino
+  ansible.builtin.file:
+    path: "{{ sync_dst_dir }}"
+    state: directory
+    owner: "{{ sync_owner }}"
+    group: "{{ sync_group }}"
+    mode: "0755"
+  become: true
+  tags: [copy_only]
+
+# Copiar árbol (simple, sin exclusiones); el owner lo fija a ubuntu
+- name: Copiar origen -> destino
+  ansible.builtin.copy:
+    src: "{{ sync_src_dir }}/"
+    dest: "{{ sync_dst_dir }}/"
+    owner: "{{ sync_owner }}"
+    group: "{{ sync_group }}"
+    mode: "0644"
+  become: true
+  tags: [copy_only]
+
+# Asegurar propiedad recursiva por si algún dir quedó heredado
+- name: Ajustar propietario/grupo recursivamente a ubuntu
+  ansible.builtin.file:
+    path: "{{ sync_dst_dir }}"
+    owner: "{{ sync_owner }}"
+    group: "{{ sync_group }}"
+    recurse: true
+  become: true
+  tags: [copy_only]
+

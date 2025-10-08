@@ -1,0 +1,7 @@
+- hosts: autovpn
+  become: true
+  tasks:
+    - name: Ejecutar SOLO las tareas de frontend del rol autovpn_stack
+      include_role:
+        name: autovpn_stack
+        tasks_from: frontend

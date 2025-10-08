@@ -21,6 +21,11 @@
     respond "ok" 200
   }
 
+  # Frontend - proxy al contenedor React
+  handle_path / { 
+    reverse_proxy frontend:80
+  }
+
   # Frontend estático
   handle {
     root * /srv/frontend/dist
